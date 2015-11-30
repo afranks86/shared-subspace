@@ -1,0 +1,483 @@
+library(rstan)
+load("compiledVectorBMF.Rdata")
+
+tr <- function(X) { sum(diag(X)) }
+
+## Compute frobenius norms
+## H = Hierachical eigen pooling
+## e.g. compare trace (U_k^T U_J)^2
+## SS = Shares space
+## e.g. compare || U_k^T U_J || (frobenius)
+createNormMatrix <- function(eigenlist, vindices, type="H") {
+    ngroups <- length(eigenlist)
+    normsMat <- matrix(NA, nrow=ngroups, ncol=ngroups)
+
+    for( i in 1:ngroups ) {
+        for( j in i:ngroups ){
+            Ui <- eigenlist[[i]]$vectors[, vindices]
+            Uj <- eigenlist[[j]]$vectors[, vindices]
+            if(type == "H") {
+                normsMat[i, j] <- sum((t(Ui)%*%Uj)^2)/sqrt(ncol(Ui)) ## these are the same
+            } else if (type == "SS") {
+                
+                normsMat[i, j] <- norm(t(Ui)%*%Uj, type="F")/sqrt(ncol(Ui))
+            }
+        }
+    }
+    diag(normsMat) <- NA
+    normsMat[lower.tri(normsMat)] <- t(normsMat)[lower.tri(normsMat)]
+
+    return(normsMat)
+}
+
+getGenderStat <- function(normsMat ) {
+
+    withinGender <- c(as.vector(normsMat[1:6, 1:6]), as.vector(normsMat[7:12, 7:12]))
+    betweenGender <- normsMat[1:6, 7:12]
+
+    median(withinGender, na.rm=TRUE)-median(betweenGender)
+
+    
+}
+
+getAgeStat <- function(normsMat) {
+
+    ages <- unique(X$Age)
+    ageStats <- list()
+    ageDiff <- c()
+    
+    UL <- normsMat[1:6, 1:6]
+    LR <- normsMat[7:12, 7:12]
+    for( i in 1:5 ) {
+
+        ageStats[[i]] <- c(UL[row(UL)==(col(UL)-i)], 
+                           (LR)[row(LR)==(col(LR)-i)])
+        ageDiff <- c(ageDiff, rep(diff(ages, lag=i), 2))
+    }
+
+    Yage <- unlist(ageStats)
+    Xage <- ageDiff
+    
+    ## return slope of norms against age
+    slope <- coef(lm(formula = Yage ~ Xage))[2]
+
+    list(slope=slope, ages=Xage, norms=Yage)
+
+}
+
+##############################################################
+### Functions for Sampling
+#############################################################
+
+## Sample from 1/sigma^2
+rs2_fc <- function(S, U, omega, n, nu0=1, s20=1) {
+  p<-nrow(S)
+  a<-( nu0 + n*p)/2
+  b<-( nu0*s20 + tr(S%*%( diag(p)  - U %*% diag(omega, nrow=length(omega)) %*% t(U))) )/2
+  1/rgamma(1, a, b)
+}
+
+## Sample eigenvalues
+debeta_un<-function(w, a, b, c, log=FALSE) {
+    x<-(a-1)*log(w) + (b-1)*log(1-w) + c*(w-1)
+    if(!log){ x<-exp(x) }
+    x
+}
+debeta_nc<-function(a, b, c) { 1/(integrate(debeta_un, 0, 1, a=a, b=b, c=c)$val) }
+debeta<-function(w, a, b, c){ debeta_un(w, a, b, c)*debeta_nc(a, b, c) }
+
+pebeta<-function(w, a, b, c) {
+    dint<- function(w, a, b, c) {
+        int<-0
+        if(w>0) { int<-integrate(debeta_un, 0, w, a, b, c, 
+                                 rel.tol = .Machine$double.eps^0.75, subdivisions=200L)$value }
+        int
+    }
+    pmin(sapply(w, dint, a, b, c)/dint(1, a, b, c), 1)
+}
+
+qebeta<-function(p, a, b, c) {
+f<-function(w, p, a, b, c){ p - pebeta(w, a, b, c) }
+w<-p*0
+for(i in 1:length(p)) {
+w[i] <- uniroot(f, interval=c(1e-10, 1-1e-10), p[i], a, b, c)$root }
+w
+}
+
+rebeta<-function(n, a, b, c, interval=c(0, 1), MH=1000) {
+    
+    uinterval<-sort( pebeta(interval, a, b, c) )
+    if(uinterval[1] < uinterval[2] ) {
+        u<-runif(n,  uinterval[1] ,   uinterval[2] )
+        w<-qebeta(u, a, b, c)
+    }
+    if(uinterval[1] == uinterval[2] ) {
+        w<-runif(n, interval[1], interval[2])
+    }
+
+    w[w>=interval[2]]<-interval[2]-1e-6
+    w[w<=interval[1]]<-interval[1]+1e-6
+
+    for(s in seq(1, MH, length=MH)) {
+        wp<-pmin(1, pmax(0, w+runif(n, -1e-3, 1e-3) ))
+        lhr<-debeta_un(wp, a, b, c, log=TRUE) - debeta_un(w, a, b, c, log=TRUE) -
+            log(interval[1]<wp | wp<interval[2])
+        lu<-log(runif(n) )
+        w[lu<lhr]<-wp[lu<lhr]
+    }
+    
+    w
+}
+
+sampleOmega <- function(Sig, U, s2, n, a=1/2, b=1) {
+
+    R <- ncol(U)
+    cvec <- diag( t(U) %*% Sig %*% U/(2*s2) )
+    omega <- numeric(R)
+
+    for(r in 1:R) {
+        if(cvec[r] > 0)
+            omega[r] <- rebeta(1, a, b+n/2, cvec[r])
+    }
+
+    omega
+}
+
+## If we want to maintain order of eigenvalues
+rsomega_gibbs <- function(S, U, s2, n, omega, a=1, b=1) {
+
+    R<-ncol(U) ; c<-diag( t(U)%*%S%*%U/(2*s2) )
+    for(r in 1:R) {
+        lb<-omega[r+1] ; if (is.na(lb)){ lb<-0 }
+        ub<-omega[r-1] ; if (length(ub)==0){ ub<-1 }
+        if(any(is.na(c(lb, ub))))
+            browser()
+        omega[r]<-rebeta(1, a, b+n/2, c[r], c(lb, ub))
+        
+        if(is.na(omega[r])){
+            omega[r]<-runif(1, lb, ub)
+        }
+    }
+    omega
+}
+
+## Shared subspace Sampling
+## phi is the prior concentration
+rU_csm_gibbs<-function(S, U, s2, omega, V, phi=0) {
+    O<-t(V)%*%U
+    prior.target <- matrix(0, nrow=ncol(V), ncol=ncol(V))
+    prior.target[1:ncol(U), 1:ncol(U)] <- phi*diag(ncol(U))
+    rbing.matrix.gibbs(t(V)%*%(S/(2*s2))%*%V+prior.target, diag(omega, nrow=length(omega)), O)
+}
+
+## Draw the shared orthonormal matrix V given other terms
+## Ok is an S x R matrix,  V is a P x S and U is P x R
+## B_k = Ok*omega_k*Ok^T
+## A_k is sample covariance matrix for group k
+sampleV <- function(Slist, Ulist, s2vec, OmegaList, V, method="gibbs") {
+
+    K <- length(Ulist)
+    S <- ncol(V)
+    P <- nrow(V)
+
+    ## First save the Bk matrices for each k
+    BkList <- list()
+    for( k in 1:K ){
+         Ok <- t(V) %*% Ulist[[k]]
+         omegaK <- OmegaList[[k]]
+         BkList[[k]] <- Ok %*% (diag(omegaK, nrow=length(omegaK)) /
+                                (2*s2vec[k])) %*% t(Ok)
+    }
+
+    ## Randomly sample a column,  i
+    for( i in sample(1:S) ) {
+        N <- NullC(V[, -i])
+
+        ## Get the linear term
+        ## for j neq i
+        C <- rep(0, P)
+        for( j in setdiff(1:S, i)) {
+            Ak_bij <- matrix(0, P, P)
+            for(k in 1:K) {
+                Ak <- Slist[[k]]
+                bk_ij <- BkList[[k]][i, j]
+                Ak_bij <- Ak_bij + Ak*bk_ij
+            }
+            C <- C+t(V[, j]) %*% Ak_bij
+        }
+        C <- 2*C
+
+        ## Get the quadratic term
+        Ak_bii <- matrix(0, P, P)
+        for(k in 1:K) {
+            Ak <- Slist[[k]]
+            bk_ii <- BkList[[k]][i, i]
+            Ak_bii <- Ak_bii+Ak*bk_ii
+        }
+        A <- Ak_bii
+        
+        Ctilde <- as.vector(C%*%N)
+        Atilde <- t(N)%*%A%*%N
+
+        NV <- as.vector(t(N)%*%V[, i])
+        
+        if( method == "gibbs" ) {
+            V[, i] <- N %*% R.rbmf.vector.gibbs(Atilde, Ctilde, NV)
+        } else if( method == "hmc" ) {
+            V[, i] <- N %*% R.rbmf.vector.hmc(Atilde, Ctilde, NV)
+        } else {
+            stop("Unknown method")
+        }
+        ## print(i)
+    }
+
+    V
+}
+
+TestTraceEquivalence <- function(Slist, Ulist, s2vec, OmegaList, V) {
+
+    K <- length(Ulist)
+    S <- ncol(V)
+    P <- nrow(V)
+
+
+    ResK <- matrix(0, P, P)
+    BkList <- list()
+    for( k in 1:K ){
+        Ok <- t(V)%*%Ulist[[k]]
+        omegaK <- OmegaList[[k]]
+        BkList[[k]] <- Ok %*% (diag(omegaK)/(2*s2vec[k]))%*%t(Ok)
+        ResK <- ResK+Slist[[k]]%*%V%*%BkList[[k]]%*%t(V)
+    }
+    Res1 <- tr(ResK)
+
+    Res2 <- 0
+    for( i in sample(1:S) ) {
+        for( j in 1:S ) {
+            Ak_bij <- matrix(0, P, P)
+            for(k in 1:K) {
+                Ak <- Slist[[k]]
+                bk_ij <- BkList[[k]][i, j]
+                Ak_bij <- Ak_bij + Ak*bk_ij
+            }
+            Res2 <- Res2+t(V[, j])%*%Ak_bij%*%V[, i]
+        }
+    }
+    Res2 <- as.numeric(Res2)
+
+    Res2-Res1
+}
+
+
+## Hierarchy on eigenvectors
+rU_bpm_gibbs <-function(S, U, s2, omega, M=I(nrow(U)), b=numeric(ncol(U)) ) {
+    ## default parameters give the uniform distribution
+    R<-ncol(U)
+    for(r in sample(1:R)) {
+        N<-NullC(U[, -r])
+        H<-t(N) %*% ( b[r]*M + omega[r]*S/(2*s2) ) %*%N
+        U[, r]<- N %*% rbing.vector.gibbs(H, t(N)%*%U[, r])
+    }
+    U
+}
+
+proposeBinaryO <- function(S, U, V, Sig, s2, omega, n, flipProb=0.1) {
+    
+    Ocur <- round(t(V) %*% U, digits=10)
+    
+    if(ncol(Ocur)!=S)
+        stop("R=S for binary sampling")
+    
+    ## change nflip entries of Ok
+    cur <- apply(Ocur, 1, sum)
+    
+    if(!any(cur==1))
+        stop("O is not binary")
+
+    flip <- which(runif(S) < 0.1)
+    cur[flip] <- 1-cur[flip]
+
+    Oprop <- matrix(0, nrow=S, ncol=S)
+    for( i in 1:S ) {
+        Oprop[i, i] <- cur[i]
+    }
+    browser()
+    
+    ## k = t(O)t(V)SkVO
+    fw <- function(w, n, K) {
+        (1-w)^(n/2) * exp(w * K)
+    }
+
+    omega_cur <- sampleOmega(Sig, V %*% Ocur, s2, n)
+    omega_prop <- sampleOmega(Sig, V %*% Oprop, s2, n)
+
+    H <-  t(V) %*% Sig %*% V / (2*s2)
+    
+    Kprop <- diag(t(Oprop) %*% H %*% Oprop)
+    Kcur <-  diag(t(Ocur) %*% H  %*% Ocur)
+
+    cprop <- sapply(which(Kprop!=0), function(i)
+        integrate(function(x) fw(x, nvec[i], Kprop[i]), lower=0, upper=1))
+    ccurs <- sapply(1:length(K), function(i) integrate(fw(x, nvec[i], Kcur[i]),
+                                                        from=0, to=1))
+
+    trans1 <- prod(1/Kprop * fw(omega_prop, nvec, Kprop))
+    trans2 <- prod(1/Kcur * fw(omega, nvec, Kcur))
+    
+    ll1 <- tr(omega %*% t(Oprop) %*% H %*% Oprop %*% omega)
+    ll2 <- tr(omega %*% t(Ocur) %*% H %*% Ocur %*% omega)
+    
+    if(-rexp(1) < ll1-ll2 ) {
+        Ocur <- Oprop
+    } 
+
+    Ocur
+}
+
+
+R.rbmf.vector.gibbs <- function (A, c, x) {
+
+    evdA <- eigen(A)
+    E <- evdA$vec
+    l <- evdA$val
+    y <- t(E) %*% x
+    d <- t(E) %*% c
+    x <- E %*% R.ry_bmf(y, l, d, length(y))
+    x/sqrt(sum(x^2))
+
+}
+
+R.rbmf.vector.hmc <- function (A, c, x, iter=10) {
+
+    evdA <- eigen(A)
+    E <- evdA$vec
+    l <- evdA$val
+    l[l < 0] <- 0
+    y <- t(E) %*% x
+    d <- as.numeric( t(E) %*% c )
+
+    sink("/dev/null");
+    results <- stan(fit=compiledVectorBMF, data=list(M=length(y)-1,lam=l, gamma=d), chains=1, iter=iter)
+    sink()
+    samps <- extract(results)$Y
+
+    ## Use the last sample
+    y <- samps[nrow(samps),]
+
+    x <- E %*% y
+    x/sqrt(sum(x^2))
+
+}
+
+
+
+R.ry_bmf <- function(y, l, d, n) {
+
+    k <-  (n-1)/2
+
+    for(i in 1:n) { 
+        omyi <- 1/(1-y[i]^2)
+        smyi <- sqrt(omyi)
+        a <- l[i]+l[i]*y[i]^2*omyi
+        b <- -1*y[i]*d[i]*smyi
+        for(j in 1:n) {
+            a <- a-l[j]*y[j]^2*omyi
+            b <- b+y[j]*d[j]*smyi
+        }
+        ## print(i)
+        theta <- R.rtheta_bmf.mh(k, a, b, abs(d[i]))
+        for(j in 1:n){
+            y[j] <- y[j]*sqrt(1-theta)*smyi
+        }
+        y[i] <- sqrt(theta)*(-1^(rbinom(1,1,1/(1+exp(2*sqrt(theta)*d[i]) ))) )
+    }
+    y
+}
+
+
+R.rtheta_bmf.mh <- function(k, a, b, c, steps=50) {
+
+    w <- c
+    u <- Inf
+    g <- k
+
+    if(a>0) {
+        g <- max(1/(1+log(2+a)),k-a)
+    }
+    count <- 1
+    
+    f <- function(x) { 1/2*log(x)+k*log(1-x)+a*x+b*sqrt(1-x)+sqrt(x)*c+log(1.0+exp(-2*sqrt(x)*c)) }
+    mode <- optimize(function(x) -f(x),lower=0,upper=1, tol=.Machine$double.eps)$minimum
+
+    fprime <- function(x) {
+        a - b/(2*sqrt(1-x)) - k/(1-x) + 1/(2*x) + c/(2*sqrt(x))
+    }
+    
+    fdoubleprime <- function(x) {
+        -b/(4*(1-x)^(3/2)) + c^2/(x*(exp(c*sqrt(x))+1)) - k/(1-x)^2 - 1/(2*x^2) - c*tanh(c*sqrt(x))/(4*x^(3/2) )
+        
+    }
+
+    dd <- fdoubleprime(mode)
+    if( dd >= 0 ) {
+        p <- 1/2
+        q <- 1/(2*mode)-1/2
+    } else {
+        pplusq <- -1*mode*(1-mode)*dd-1
+        p <- mode*pplusq
+        if( p < 1 ) {
+            p <- 1
+            q <- (1-mode)/mode
+        } else {
+            q <- pplusq - p
+        }
+    }
+
+    lprop <- function(x) { dbeta(x,p,q, log=TRUE) }
+    thCur <- mode
+    reject <- 0
+    for(k in 1:steps ) {
+
+        u <- runif(1,0,1)
+        th <- ifelse(runif(1,0,1)<1/2,rbeta(1,1/2,g),rbeta(1,p,q))
+        th <- rbeta(1,p,q)
+
+        log.mh <- f(th)-f(thCur)+lprop(thCur)-lprop(th)
+        if( log.mh > 0 ) {
+            thCur <- th
+        } else {
+            u <- runif(1,0,1)
+            if ( log(u) < log.mh ) {
+                thCur <- th
+            } else {
+                reject <- reject+1
+            }
+        }
+        
+    }
+
+    if( reject==steps ) {
+        
+        browser()
+        print(mode)
+        curve(f(x))
+        curve(lprop(x)-optimize(function(x) lprop(x)-f(x),interval=c(0,1))$objective,col="red",add=TRUE)
+        
+    }
+    print(reject/steps)
+    
+    thCur
+}
+
+
+
+tmpfunc <- function(A, c, x, nprops=1) {
+
+    evdA <- eigen(A)
+    E <- evdA$vec
+    l <- evdA$val
+    y <- as.vector( t(E) %*% x )
+    d <- as.vector( t(E) %*% c )
+    n <- length(y)
+
+}
