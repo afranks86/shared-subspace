@@ -1,70 +1,63 @@
- generateData <- function(P=100, S=10, R=5, ngroups=10) {
+## P - number of features (cols) for each group of measurements
+## S - Number of columns of V
+## R - Number of columns of U = VO
+## nvec = sample size for each group
+## s2vec - measurement noise variance
+## LambdaList - list of length ngroups, each a vec of evals length R
+## Olist - 
+
+generateData <- function(P=200, S=10, R=S, ngroups=10, nvec=rep(100, ngroups),
+                         V=rbind(diag(10), matrix(0, nrow=P-S, ncol=S)),
+                         s2vec=rep(1,ngroups), LambdaList=NULL, Olist=NULL) {
 
     library(rstiefel)
     library(mvtnorm)
-
     library(rstiefel)
     source("helper.R")
 
+    if( is.null(LambdaList) ) {
+        LambdaList <- vector("list", ngroups)
+    } else if (length(LambdaList) != ngroups) {
+        stop(sprintf("LambdaList must be of length ngroups=%s"), ngroups)
+    } 
 
-    load("ae_XY_m527.RData")
-    XDM <- model.matrix(~ -1 + as.factor(Age):as.factor(Sex), data=X )
-    fit<-lm(Y ~ -1+XDM)
-
-    ## number of eigenvectors if pooled space
-    S <- 10
-    ## number of eigenvectors in group subspace
-    R <- 5
-    nsamps <- 10
-    P <- ncol(Y)
-
-    ngroups <- ncol(XDM)
-
-    res <- fit$residuals
-    eigen.all <- eigen(t(res) %*% res/(nrow(res)-1))
-    V <- eigen.all$vectors[1:P, 1:S]
-    V <- sweep(V,2,sqrt(colSums(V^2)),'/')
-
-    ## Generate data to look like real data
-
-    Slist <- Ulist <- Olist <- OmegaList <- SigmaList <- eigenlist <- list()
-    nvec <- numeric(ngroups)
-    s2vec <- numeric(ngroups)
+    if( is.null(Olist) ){
+        Olist <- vector("list", ngroups)
+    } else if (length(Olist) != ngroups) {
+        stop(sprintf("Olist must be of length ngroups=%s"), ngroups)
+    }
+    
+    Slist <- Ylist <- Ulist <- OmegaList <- SigmaList <- list()
 
     for ( k in 1:ngroups ) {
 
-        print(k)
-
-        indices <- which(XDM[, k]==1)
-        res <- fit$residuals[indices, ]
-        cur <- t(res) %*% res/(nrow(res)-1)
-        ecur <- eigen(cur)
-        eigenlist[[k]] <- ecur
-        
-        s2vec[k] <- 1
-        
-        ## Generate Ok
-        Ok <- matrix(0,nrow=S,ncol=R)
-        rows <- sample(1:S,R)
-        for(r in 1:R) {
-            Ok[rows[r],r] <- 1
+        if( is.null(Olist[[k]]) ) {
+            ## Generate Ok
+            Ok <- generateRandomO(S, R)
+            Olist[[k]] <- Ok
         }
-        Olist[[k]] <- Ok
+
+        if( is.null(LambdaList[[k]]) ){
+            LambdaList[[k]] <- sort(rexp(R, 1/10), decreasing=TRUE)
+        }
+                
         Uk <- V%*%Ok
         Ulist[[k]] <- Uk
-        
-        Lam <- diag(head(ecur$values,n=R))
-        OmegaList[[k]] <- diag(Lam/(Lam+1))
-        nvec[k] <- 20
-        SigmaList[[k]] <- s2vec[k]*(Uk%*%Lam%*%t(Uk)+diag(P))
+        Lamk <- LambdaList[[k]]
+        OmegaList[[k]] <- Lamk/(Lamk+1)
 
-        res <- rmvnorm(n=nvec[k],sigma=SigmaList[[k]])
-        Slist[[k]] <- t(res)%*%res
+        LamMat <- diag(Lamk, nrow=length(Lamk), ncol=length(Lamk))
+        SigmaList[[k]] <- s2vec[k]*(Uk %*% LamMat %*% t(Uk)+diag(P))
+
+        ## Generate sample covariance matrix and save
+        Y <- rmvnorm(n=nvec[k],sigma=SigmaList[[k]])
+        Ylist[[k]] <- Y
+        Slist[[k]] <- t(Y) %*% Y
 
     }
 
-    list(V=V, Slist=Slist, Ulist=Ulist, Olist=Olist, OmegaList=OmegaList,
-         SigmaList=SigmaList, eigenlist=eigenlist, s2vec=s2vec,
+    list(V=V, Slist=Slist, Ylist=Ylist, Ulist=Ulist, Olist=Olist,
+         OmegaList=OmegaList, SigmaList=SigmaList, s2vec=s2vec,
          S=S, R=R, P=P, ngroups=ngroups, nvec=nvec)
     
 }
@@ -94,7 +87,7 @@ if( FALSE ) {
     }
     U <- V %*% Ok
     for( i in 1:1000 ) {
-        Ok <- proposeBinaryO(S, R, U, V, Sig, s2, omega, nvec[1], nflip=2)
+        Ok <- proposeBinaryO(S, U, V, Sig, s2, omega, nvec[1], flipProb=0.1)
         U <- V %*% Ok
         if(any(new!=Ocur)) {
             count <- count+1
@@ -179,4 +172,15 @@ if( FALSE ) {
         dp[i] <- norm(t(Vcur)%*%V,type="f")
     }
     plot(dp,type="l")
+}
+
+generateRandomO <- function(S, R, iters=25) {
+            Omat <- matrix(0,nrow=S,ncol=R)
+            Omat[1:R, 1:R] <- diag(R)
+            
+            for(i in 1:iters) {
+                Omat <- rbing.matrix.gibbs(diag(S), diag(R), Omat)
+            }
+
+            Omat
 }

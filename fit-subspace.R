@@ -1,5 +1,9 @@
-## TODO
-fitSubspace <- function(init, niters=100, nskip=1, outfile="fit.RData") {
+## init is a list containing initial V, U's, Omega's,
+## samples per group (nvec) and Sample covariance (Slist)
+
+fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
+                        niters=100, nskip=1, init=NULL, binaryO=FALSE) {
+
 
     niters <- niters
     nskip <- nskip
@@ -11,35 +15,58 @@ fitSubspace <- function(init, niters=100, nskip=1, outfile="fit.RData") {
     omegaSamps <- array(dim=c(R, ngroups, ncol=nsamps))
     s2samps <- matrix(nrow=ngroups, ncol=nsamps)
 
-    defined <- c("V", "Ulist", "OmegaList", "nvec", "Slist") %in% names(init)
-    names(defined) <- c("V", "Ulist", "OmegaList", "nvec", "Slist")
-    if(any(!defined)) {
-        stop(sprintf("%s not initialized!",
-                     paste(names(defined)[!defined], collapse=", ")))
+    initItems <- c("V", "Ulist", "OmegaList")
+    if( is.null(init) ) {
+
+        Vinit <- matrix(0,nrow=P, ncol=S)
+        Vinit[1:S,1:S] <- diag(S)
+
+        OmegaList <- Olist <- Ulist <- list()
+        for(k in 1:ngroups) {
+            OmegaList[[k]] <- rep(1/2, R)
+
+            Ok <- matrix(0, nrow=S, ncol=R)
+            Ok[1:R, 1:R] <- diag(R)
+
+            Olist[[k]] <- Ok
+            Ulist[[k]] <- V %*% Ok
+        }
+        s2vec <- rexp(ngroups)  
+
+        init <- list(V=Vinit, Ulist=Ulist, OmegaList=OmegaList, s2vec=s2vec)
+        
+    } else if (any(!(initItems %in% names(init)))) {
+        stop("Some parameters unintialized!")
+        ## To Finish
     }
-    
 
     V <- init$V
     Ulist <- init$Ulist
-    Slist <- init$Slist
     OmegaList <- init$OmegaList
-    nvec <- init$nvec
     
     for ( i in 1:niters ) {
 
-        V <- sampleV(Slist, Ulist, s2vec, OmegaList, V, method="hmc")        
+        V <- sampleV(Slist, Ulist, s2vec, OmegaList, V, method="hmc")    
         
         for ( k in 1:ngroups ) {
             
             ## Sample sigma^2_k
-            s2vec[k] <- rs2_fc(Slist[[k]], Ulist[[k]], OmegaList[[k]], nvec[k])
-            
-            ## Sample omegas_k,  do not necessarily maintain order
-            OmegaList[[k]] <- sampleOmega(Slist[[k]], Ulist[[k]], s2vec[k], nvec[k])
-            
-            ## Sample O_k
-            Ok <- rU_csm_gibbs(Slist[[k]], Ulist[[k]], s2vec[k], OmegaList[[k]], V)
-            
+            s2vec[k] <- sampleSigma2(Slist[[k]], Ulist[[k]], OmegaList[[k]], nvec[k])
+
+            if(binaryO) {
+                samp <- proposeBinaryO(S, U, V, Sig, s2, Omega, n, flipProb=0.1)
+
+                Ok <- samp$O
+                OmegaList[[k]] <- samp$omega
+                
+            } else {
+                ## Sample omegas_k,  do not necessarily maintain order
+                OmegaList[[k]] <- sampleOmega(Slist[[k]], Ulist[[k]], s2vec[k], nvec[k])
+                ## Sample O_k
+                Ok <- sampleO(Slist[[k]], Ulist[[k]], s2vec[k], OmegaList[[k]], V)
+                
+            }
+
             Ulist[[k]] <- V %*% Ok
             
             ## save samples        
@@ -62,7 +89,6 @@ fitSubspace <- function(init, niters=100, nskip=1, outfile="fit.RData") {
         }
     }
 
-    save(S, R, V, init, ngroups, Usamps, Osamps, Vsamps, 
-         omegaSamps, s2samps, file=outfile)
-    
+    list(S=S, R=R, V=V, init=init, ngroups=ngroups, Usamps=Usamps,
+         Osamps=Osamps, Vsamps=Vsamps, omegaSamps=omegaSamps, s2samps=s2samps)
 }

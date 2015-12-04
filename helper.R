@@ -70,46 +70,62 @@ getAgeStat <- function(normsMat) {
 #############################################################
 
 ## Sample from 1/sigma^2
-rs2_fc <- function(S, U, omega, n, nu0=1, s20=1) {
-  p<-nrow(S)
-  a<-( nu0 + n*p)/2
-  b<-( nu0*s20 + tr(S%*%( diag(p)  - U %*% diag(omega, nrow=length(omega)) %*% t(U))) )/2
-  1/rgamma(1, a, b)
+sampleSigma2 <- function(S, U, omega, n, nu0=1, s20=1) {
+
+    p <- nrow(S)
+    a <- ( nu0 + n*p)/2
+    b <- ( nu0*s20 + tr(S%*%( diag(p)  - U %*% diag(omega, nrow=length(omega)) %*% t(U))) )/2
+    1/rgamma(1, a, b)
 }
 
-## Sample eigenvalues
-debeta_un<-function(w, a, b, c, log=FALSE) {
-    x<-(a-1)*log(w) + (b-1)*log(1-w) + c*(w-1)
-    if(!log){ x<-exp(x) }
+## Unormalized eigenvalues
+debeta_un <- function(w, a, b, c, log=FALSE) {
+    x <- (a-1)*log(w) + (b-1)*log(1-w) + c*(w-1)
+    if(!log){
+        x <- exp(x)
+    }
     x
 }
-debeta_nc<-function(a, b, c) { 1/(integrate(debeta_un, 0, 1, a=a, b=b, c=c)$val) }
-debeta<-function(w, a, b, c){ debeta_un(w, a, b, c)*debeta_nc(a, b, c) }
+
+## normalizing constant
+debeta_nc <- function(a, b, c) {
+    1/(integrate(debeta_un, 0, 1, a=a, b=b, c=c)$val)
+}
+
+## normalized
+debeta <- function(w, a, b, c){
+    debeta_un(w, a, b, c)*debeta_nc(a, b, c)
+}
 
 pebeta<-function(w, a, b, c) {
     dint<- function(w, a, b, c) {
-        int<-0
-        if(w>0) { int<-integrate(debeta_un, 0, w, a, b, c, 
-                                 rel.tol = .Machine$double.eps^0.75, subdivisions=200L)$value }
+        int <- 0
+        if(w > 0) {
+            int <- integrate(debeta_un, 0, w, a, b, c, 
+                             rel.tol = .Machine$double.eps^0.75,
+                             subdivisions=200L)$value
+        }
         int
     }
     pmin(sapply(w, dint, a, b, c)/dint(1, a, b, c), 1)
 }
 
 qebeta<-function(p, a, b, c) {
-f<-function(w, p, a, b, c){ p - pebeta(w, a, b, c) }
-w<-p*0
-for(i in 1:length(p)) {
-w[i] <- uniroot(f, interval=c(1e-10, 1-1e-10), p[i], a, b, c)$root }
-w
+
+    f <- function(w, p, a, b, c){ p - pebeta(w, a, b, c) }
+    w <- p*0
+    for(i in 1:length(p)) {
+        w[i] <- uniroot(f, interval=c(1e-10, 1-1e-10), p[i], a, b, c)$root
+    }
+    w
 }
 
 rebeta<-function(n, a, b, c, interval=c(0, 1), MH=1000) {
-    
-    uinterval<-sort( pebeta(interval, a, b, c) )
+
+    uinterval <- sort( pebeta(interval, a, b, c) )
     if(uinterval[1] < uinterval[2] ) {
-        u<-runif(n,  uinterval[1] ,   uinterval[2] )
-        w<-qebeta(u, a, b, c)
+        u <- runif(n,  uinterval[1],   uinterval[2])
+        w <- qebeta(u, a, b, c)
     }
     if(uinterval[1] == uinterval[2] ) {
         w<-runif(n, interval[1], interval[2])
@@ -119,25 +135,30 @@ rebeta<-function(n, a, b, c, interval=c(0, 1), MH=1000) {
     w[w<=interval[1]]<-interval[1]+1e-6
 
     for(s in seq(1, MH, length=MH)) {
-        wp<-pmin(1, pmax(0, w+runif(n, -1e-3, 1e-3) ))
-        lhr<-debeta_un(wp, a, b, c, log=TRUE) - debeta_un(w, a, b, c, log=TRUE) -
-            log(interval[1]<wp | wp<interval[2])
-        lu<-log(runif(n) )
-        w[lu<lhr]<-wp[lu<lhr]
+        wp <- pmin(1-1e-6, pmax(0+1e-6, w+runif(n, -1e-3, 1e-3) ))
+
+        lhr <- debeta_un(wp, a, b, c, log=TRUE) -
+            debeta_un(w, a, b, c, log=TRUE) -
+            log(interval[1] < wp | wp < interval[2])
+        lu <- log(runif(n))
+        w[lu < lhr] <- wp[lu < lhr]
     }
     
     w
 }
 
-sampleOmega <- function(Sig, U, s2, n, a=1/2, b=1) {
+sampleOmega <- function(Sig, U, s2, n, a=1, b=1) {
 
     R <- ncol(U)
     cvec <- diag( t(U) %*% Sig %*% U/(2*s2) )
     omega <- numeric(R)
 
     for(r in 1:R) {
-        if(cvec[r] > 0)
+        if(cvec[r]==0) {
+            omega[r] <- rbeta(1, a, n/2+b)
+        } else {
             omega[r] <- rebeta(1, a, b+n/2, cvec[r])
+        }
     }
 
     omega
@@ -163,11 +184,17 @@ rsomega_gibbs <- function(S, U, s2, n, omega, a=1, b=1) {
 
 ## Shared subspace Sampling
 ## phi is the prior concentration
-rU_csm_gibbs<-function(S, U, s2, omega, V, phi=0) {
-    O<-t(V)%*%U
+sampleO <- function(SC, U, s2, omega, V, phi=0) {
+
+    O <- t(V)%*%U
+
+    ## if phi > 0, prior concentrates around first R eigenvectors of V
     prior.target <- matrix(0, nrow=ncol(V), ncol=ncol(V))
     prior.target[1:ncol(U), 1:ncol(U)] <- phi*diag(ncol(U))
-    rbing.matrix.gibbs(t(V)%*%(S/(2*s2))%*%V+prior.target, diag(omega, nrow=length(omega)), O)
+
+    rbing.matrix.gibbs(t(V) %*% (SC/(2*s2))%*%V+prior.target,
+                       diag(omega, nrow=length(omega)), O)
+    
 }
 
 ## Draw the shared orthonormal matrix V given other terms
@@ -234,53 +261,6 @@ sampleV <- function(Slist, Ulist, s2vec, OmegaList, V, method="gibbs") {
     V
 }
 
-TestTraceEquivalence <- function(Slist, Ulist, s2vec, OmegaList, V) {
-
-    K <- length(Ulist)
-    S <- ncol(V)
-    P <- nrow(V)
-
-
-    ResK <- matrix(0, P, P)
-    BkList <- list()
-    for( k in 1:K ){
-        Ok <- t(V)%*%Ulist[[k]]
-        omegaK <- OmegaList[[k]]
-        BkList[[k]] <- Ok %*% (diag(omegaK)/(2*s2vec[k]))%*%t(Ok)
-        ResK <- ResK+Slist[[k]]%*%V%*%BkList[[k]]%*%t(V)
-    }
-    Res1 <- tr(ResK)
-
-    Res2 <- 0
-    for( i in sample(1:S) ) {
-        for( j in 1:S ) {
-            Ak_bij <- matrix(0, P, P)
-            for(k in 1:K) {
-                Ak <- Slist[[k]]
-                bk_ij <- BkList[[k]][i, j]
-                Ak_bij <- Ak_bij + Ak*bk_ij
-            }
-            Res2 <- Res2+t(V[, j])%*%Ak_bij%*%V[, i]
-        }
-    }
-    Res2 <- as.numeric(Res2)
-
-    Res2-Res1
-}
-
-
-## Hierarchy on eigenvectors
-rU_bpm_gibbs <-function(S, U, s2, omega, M=I(nrow(U)), b=numeric(ncol(U)) ) {
-    ## default parameters give the uniform distribution
-    R<-ncol(U)
-    for(r in sample(1:R)) {
-        N<-NullC(U[, -r])
-        H<-t(N) %*% ( b[r]*M + omega[r]*S/(2*s2) ) %*%N
-        U[, r]<- N %*% rbing.vector.gibbs(H, t(N)%*%U[, r])
-    }
-    U
-}
-
 proposeBinaryO <- function(S, U, V, Sig, s2, omega, n, flipProb=0.1) {
     
     Ocur <- round(t(V) %*% U, digits=10)
@@ -301,13 +281,8 @@ proposeBinaryO <- function(S, U, V, Sig, s2, omega, n, flipProb=0.1) {
     for( i in 1:S ) {
         Oprop[i, i] <- cur[i]
     }
-    browser()
     
     ## k = t(O)t(V)SkVO
-    fw <- function(w, n, K) {
-        (1-w)^(n/2) * exp(w * K)
-    }
-
     omega_cur <- sampleOmega(Sig, V %*% Ocur, s2, n)
     omega_prop <- sampleOmega(Sig, V %*% Oprop, s2, n)
 
@@ -316,22 +291,24 @@ proposeBinaryO <- function(S, U, V, Sig, s2, omega, n, flipProb=0.1) {
     Kprop <- diag(t(Oprop) %*% H %*% Oprop)
     Kcur <-  diag(t(Ocur) %*% H  %*% Ocur)
 
-    cprop <- sapply(which(Kprop!=0), function(i)
-        integrate(function(x) fw(x, nvec[i], Kprop[i]), lower=0, upper=1))
-    ccurs <- sapply(1:length(K), function(i) integrate(fw(x, nvec[i], Kcur[i]),
-                                                        from=0, to=1))
+    trans1 <- sum(log(sapply(1:length(omega_prop),
+                             function(i) debeta(omega_prop[i], 1, 1+n/2, Kprop[i]))))
+    trans2 <- sum(log(sapply(1:length(omega_cur),
+               function(i) debeta(omega_cur[i], 1, 1+n/2, Kcur[i]))))
 
-    trans1 <- prod(1/Kprop * fw(omega_prop, nvec, Kprop))
-    trans2 <- prod(1/Kcur * fw(omega, nvec, Kcur))
     
-    ll1 <- tr(omega %*% t(Oprop) %*% H %*% Oprop %*% omega)
-    ll2 <- tr(omega %*% t(Ocur) %*% H %*% Ocur %*% omega)
+    ll1 <- tr(omega %*% t(Oprop) %*% H %*% Oprop %*% omega) +
+        n/2*sum(log(omega_prop))
+    ll2 <- tr(omega %*% t(Ocur) %*% H %*% Ocur %*% omega) +
+        n/2*sum(log(omega_cur))
     
-    if(-rexp(1) < ll1-ll2 ) {
+    if(-rexp(1) < ll1+trans2-ll2-trans1 ) {
         Ocur <- Oprop
+        omega_cur <- omega_prop
     } 
 
-    Ocur
+    list(O=Ocur, omega=omega_cur)
+
 }
 
 
@@ -467,17 +444,4 @@ R.rtheta_bmf.mh <- function(k, a, b, c, steps=50) {
     print(reject/steps)
     
     thCur
-}
-
-
-
-tmpfunc <- function(A, c, x, nprops=1) {
-
-    evdA <- eigen(A)
-    E <- evdA$vec
-    l <- evdA$val
-    y <- as.vector( t(E) %*% x )
-    d <- as.vector( t(E) %*% c )
-    n <- length(y)
-
 }
