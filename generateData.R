@@ -7,7 +7,7 @@
 ## Olist - 
 
 generateData <- function(P=200, S=10, R=S, ngroups=10, nvec=rep(100, ngroups),
-                         V=rbind(diag(10), matrix(0, nrow=P-S, ncol=S)),
+                         V=rbind(diag(S), matrix(0, nrow=P-S, ncol=S)),
                          s2vec=rep(1,ngroups), LambdaList=NULL, Olist=NULL) {
 
     library(rstiefel)
@@ -32,8 +32,9 @@ generateData <- function(P=200, S=10, R=S, ngroups=10, nvec=rep(100, ngroups),
     for ( k in 1:ngroups ) {
 
         if( is.null(Olist[[k]]) ) {
+            print(k)
             ## Generate Ok
-            Ok <- generateRandomO(S, R)
+            Ok <- rustiefel(S, R)
             Olist[[k]] <- Ok
         }
 
@@ -48,7 +49,7 @@ generateData <- function(P=200, S=10, R=S, ngroups=10, nvec=rep(100, ngroups),
 
         LamMat <- diag(Lamk, nrow=length(Lamk), ncol=length(Lamk))
         SigmaList[[k]] <- s2vec[k]*(Uk %*% LamMat %*% t(Uk)+diag(P))
-
+        
         ## Generate sample covariance matrix and save
         Y <- rmvnorm(n=nvec[k],sigma=SigmaList[[k]])
         Ylist[[k]] <- Y
@@ -61,6 +62,7 @@ generateData <- function(P=200, S=10, R=S, ngroups=10, nvec=rep(100, ngroups),
          S=S, R=R, P=P, ngroups=ngroups, nvec=nvec)
     
 }
+
 
 
 if( FALSE ) {
@@ -172,15 +174,4 @@ if( FALSE ) {
         dp[i] <- norm(t(Vcur)%*%V,type="f")
     }
     plot(dp,type="l")
-}
-
-generateRandomO <- function(S, R, iters=25) {
-            Omat <- matrix(0,nrow=S,ncol=R)
-            Omat[1:R, 1:R] <- diag(R)
-            
-            for(i in 1:iters) {
-                Omat <- rbing.matrix.gibbs(diag(S), diag(R), Omat)
-            }
-
-            Omat
 }

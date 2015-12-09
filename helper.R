@@ -186,15 +186,24 @@ rsomega_gibbs <- function(S, U, s2, n, omega, a=1, b=1) {
 ## phi is the prior concentration
 sampleO <- function(SC, U, s2, omega, V, phi=0) {
 
-    O <- t(V)%*%U
+    O <- t(V) %*% U
 
     ## if phi > 0, prior concentrates around first R eigenvectors of V
     prior.target <- matrix(0, nrow=ncol(V), ncol=ncol(V))
     prior.target[1:ncol(U), 1:ncol(U)] <- phi*diag(ncol(U))
 
-    rbing.matrix.gibbs(t(V) %*% (SC/(2*s2))%*%V+prior.target,
-                       diag(omega, nrow=length(omega)), O)
-    
+    A <- t(V) %*% (SC/(2*s2))%*%V+prior.target
+    B <- diag(omega, nrow=length(omega))
+
+    ord <- order(omega, decreasing=TRUE)
+    revOrd <- order(ord)
+
+    Btilde <- B[ord, ord]
+    Otilde <- O[, ord]
+
+    O <- rbing.matrix.gibbs(A, Btilde, Otilde)
+
+    O[, revOrd]
 }
 
 ## Draw the shared orthonormal matrix V given other terms
@@ -444,4 +453,16 @@ R.rtheta_bmf.mh <- function(k, a, b, c, steps=50) {
     print(reject/steps)
     
     thCur
+}
+
+steinsLoss <- function(C1, C2inv) {
+
+    sum(diag(C1 %*% C2inv)) - log(det(C1 %*% C2inv)) - nrow(C1)
+
+}
+
+getSigmaInv <- function(P, U, Omega, s2) {
+    
+    s2*(diag(P) - U %*% diag(Omega) %*% t(U))
+    
 }

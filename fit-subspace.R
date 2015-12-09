@@ -47,26 +47,29 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
     for ( i in 1:niters ) {
 
         V <- sampleV(Slist, Ulist, s2vec, OmegaList, V, method="hmc")    
-        
+
         for ( k in 1:ngroups ) {
+
+            Uk <- V %*% Olist[[k]]
             
             ## Sample sigma^2_k
-            s2vec[k] <- sampleSigma2(Slist[[k]], Ulist[[k]], OmegaList[[k]], nvec[k])
+            s2vec[k] <- sampleSigma2(Slist[[k]], Uk, OmegaList[[k]], nvec[k])
 
             if(binaryO) {
-                samp <- proposeBinaryO(S, U, V, Sig, s2, Omega, n, flipProb=0.1)
+                samp <- proposeBinaryO(S, Uk, V, Sig, s2, Omega, n, flipProb=0.1)
 
                 Ok <- samp$O
                 OmegaList[[k]] <- samp$omega
                 
             } else {
                 ## Sample omegas_k,  do not necessarily maintain order
-                OmegaList[[k]] <- sampleOmega(Slist[[k]], Ulist[[k]], s2vec[k], nvec[k])
+                OmegaList[[k]] <- sampleOmega(Slist[[k]], Uk, s2vec[k], nvec[k])
                 ## Sample O_k
-                Ok <- sampleO(Slist[[k]], Ulist[[k]], s2vec[k], OmegaList[[k]], V)
+                Ok <- sampleO(Slist[[k]], Uk, s2vec[k], OmegaList[[k]], V)
                 
             }
 
+            Olist[[k]] <- Ok
             Ulist[[k]] <- V %*% Ok
             
             ## save samples        
