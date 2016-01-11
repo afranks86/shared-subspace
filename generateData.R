@@ -8,7 +8,7 @@
 
 generateData <- function(P=200, S=10, R=S, ngroups=10, nvec=rep(100, ngroups),
                          V=rbind(diag(S), matrix(0, nrow=P-S, ncol=S)),
-                         s2vec=rep(1,ngroups), LambdaList=NULL, Olist=NULL) {
+                         s2vec=rep(1, ngroups), LambdaList=NULL, Olist=NULL) {
 
     library(rstiefel)
     library(mvtnorm)
@@ -24,7 +24,7 @@ generateData <- function(P=200, S=10, R=S, ngroups=10, nvec=rep(100, ngroups),
     if( is.null(Olist) ){
         Olist <- vector("list", ngroups)
     } else if (length(Olist) != ngroups) {
-        stop(sprintf("Olist must be of length ngroups=%s"), ngroups)
+        stop(sprintf("Olist must be of length ngroups=%s", ngroups))
     }
     
     Slist <- Ylist <- Ulist <- OmegaList <- SigmaList <- list()
@@ -41,7 +41,9 @@ generateData <- function(P=200, S=10, R=S, ngroups=10, nvec=rep(100, ngroups),
         if( is.null(LambdaList[[k]]) ){
             LambdaList[[k]] <- sort(rexp(R, 1/10), decreasing=TRUE)
         }
-                
+
+        Ok <- Olist[[k]]
+        
         Uk <- V%*%Ok
         Ulist[[k]] <- Uk
         Lamk <- LambdaList[[k]]
@@ -49,7 +51,6 @@ generateData <- function(P=200, S=10, R=S, ngroups=10, nvec=rep(100, ngroups),
 
         LamMat <- diag(Lamk, nrow=length(Lamk), ncol=length(Lamk))
         SigmaList[[k]] <- s2vec[k]*(Uk %*% LamMat %*% t(Uk)+diag(P))
-        
         ## Generate sample covariance matrix and save
         Y <- rmvnorm(n=nvec[k],sigma=SigmaList[[k]])
         Ylist[[k]] <- Y

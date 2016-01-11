@@ -3,12 +3,17 @@ source("fit-subspace.R")
 source("generateData.R")
 source("helper.R")
 
-## Subspace Shrinkage: U_k = VO_k
+########################################################
+############# Data Generation #########################
+########################################################
+evals <- c(250, 125, 50, 30, 30 ,30, 20, 20, 20, 20, 20)
+## For all models Sigma_k = s2(Psi_k + diag(P))
+
+## Subspace Shrinkage: Psi_k = VO_kLam_kO_k^TV^T
 dat1 <- generateData(S=10, R=10, ngroups=10, nvec=rep(20, 10))
 save(dat1, file="simDat1.RData")
 
-
-## Complete Pooling U_k = VO
+## Complete Pooling: Psi_k = Psi
 ngroups <- dat1$ngroups
 S <- dat1$S
 R <- dat1$R
@@ -27,9 +32,24 @@ for( k in 1:ngroups) {
 dat2 <- generateData(S=S, R=R, Olist=Olist, ngroups=10, nvec=rep(20, 10))
 save(dat2,file="simDat2.RData")
 
-## No Shrinkage: U_k = V_KO_k (e.g. U_k is completely free)
+## No pooling: Psi_k = Psi_k
+P <- dat1$P
+S <- P
+R <- dat1$R
+ngroups <- dat1$ngroups
+Olist <- OmegaList <- list()
+for( k in 1:ngroups) {
+    Olist[[k]] <- rustiefel(200, 10)
+    lamk <- diag(rexp(R, 1/10))
+    OmegaList[[k]] <- lamk/(1+lamk)
+}
+dat3 <- generateData(P=P, S=S, R=R, V=diag(S), Olist=Olist,
+                     ngroups=ngroups, nvec=rep(20, ngroups))
 
-## TODO
+########################################################
+############# Data Fit #########################
+########################################################
+
 
 ####### FIT DATA USING SHARED SUBSPACE ###############
 
@@ -57,10 +77,11 @@ for(k in 1:ngroups) {
 s2vec <- rexp(ngroups)
 
 initSS <- list(V=Vinit, Ulist=Ulist, OmegaList=OmegaList, s2vec=s2vec)
-
+## initSS <- list(V=dat1$V, Ulist=dat1$Ulist, OmegaList=dat1$OmegaList, s2vec=dat1$s2vec)
 ## fit dat1
 resDat1SS <- fitSubspace(dat1$P, dat1$S, dat1$R, dat1$Slist,
-                         dat1$nvec, dat1$ngroups, init=initSS, niters=200)
+                         dat1$nvec, dat1$ngroups, init=initSS, niters=200,
+                         sigmaTruthList=dat1$SigmaList)
 save(resDat1SS, file="results_dat1_ss.RData")
 
 ## fit dat2 
@@ -78,7 +99,7 @@ for(i in 1:length(Ylist)){
 }
 
 Slist <- Ulist <- OmegaList <- list()
-Slist[[1]] <- Ypooled %*% t(Ypooled)
+Slist[[1]] <- t(Ypooled) %*% Ypooled
 OmegaList[[1]] <- rep(1/2, S)
 V <- initSS$V
 Ulist[[1]] <- initSS$Ulist[[1]]
@@ -100,57 +121,135 @@ for(i in 1:length(Ylist)){
 }
 
 Slist <- list()
-Slist[[1]] <- Ypooled %*% t(Ypooled)
+Slist[[1]] <- t(Ypooled) %*% Ypooled
 
 resDat2CP <- fitSubspace(dat2$P, dat2$S, dat2$R,
                          Slist, nvec, ngroups=1, init=initCP, niters=200)
 save(resDat2CP, file="results_dat2_cp.RData")
 
-############################################################################
+
+#################  Fit Data Using No Pooling #############################
+
+## fit dat1
+nsamps <- niters <- 200
+resDat1NP <- list(S=dat1$S, R=dat1$R, ngroups=dat1$ngroups)
+
+Usamps <- array(dim=c(P, R, ngroups, nsamps))
+omegaSamps <- array(dim=c(R, ngroups, ncol=nsamps))
+s2samps <- matrix(nrow=ngroups, ncol=nsamps)
+    
+for(k in 1:dat1$ngroups) {
+    
+    resDat1NPk <- fitBayesianSpike(dat1$P, dat1$S, dat1$R, dat1$Slist[[k]], dat1$nvec[k], niters=niters)
+    
+    Usamps[, , k, ] <- resDat1NPk$Usamps
+    omegaSamps[, k, ] <- resDat1NPk$omegaSamps
+    s2samps[k, ] <- resDat1NPk$s2samps
+}
+resDat1NP$Usamps <- Usamps
+resDat1NP$omegaSamps <- omegaSamps
+resDat1NP$s2samps <- s2samps
+save(resDat1NP, file="results_dat1_np.RData")
+
+## fit dat2
+nsamps <- niters <- 200
+resDat2NP <- list(S=dat2$S, R=dat2$R, ngroups=dat2$ngroups)
+
+Usamps <- array(dim=c(P, R, ngroups, nsamps))
+omegaSamps <- array(dim=c(R, ngroups, ncol=nsamps))
+s2samps <- matrix(nrow=ngroups, ncol=nsamps)
+    
+for(k in 1:dat2$ngroups) {
+
+    resDat2NPk <- fitBayesianSpike(dat2$P, dat2$S, dat2$R, dat2$Slist[[k]], dat2$nvec[k], niters=niters)
+
+    Usamps[, , k, ] <- resDat2NPk$Usamps
+    omegaSamps[, k, ] <- resDat2NPk$omegaSamps
+    s2samps[k, ] <- resDat2NPk$s2samps
+}
+resDat2NP$Usamps <- Usamps
+resDat2NP$omegaSamps <- omegaSamps
+resDat2NP$s2samps <- s2samps
+save(resDat2NP, file="results_dat2_np.RData")
+
+
+steinsLoss(dat1$SigmaList[[1]], getSigmaInv(dat1$P, resDat1NP$Usamps[, , 200], resDat1NP$omegaSamps[, 200], resDat1NP$s2samps[200]))
+
+#################### Summarize Results ################################
 
 load("results_dat1_ss.RData")
 
+sl <- 0
 for(k in 1:dat1$ngroups) {
-    Uk <- resDat1SS$Usamps[, , k, 200]
-    Omega <- resDat1SS$omegaSamps[, k, 200]
-    s2 <- resDat1SS$s2samps[k, 200]
-    SigmaInvHat <- getSigmaInv(P, Uk, Omega, s2)
-    print(steinsLoss(dat1$SigmaList[[k]], SigmaInvHat))
+    UkList <- resDat1SS$Usamps[, , k, 101:200]
+    OmegaList <- resDat1SS$omegaSamps[, k, 101:200]
+    s2list <- resDat1SS$s2samps[k, 101:200]
+    SigmaInvPM <- getPostMeanSigmaInv(P, UkList, OmegaList, s2list, 100)
+    sl <- sl + steinsLoss(dat1$SigmaList[[k]], SigmaInvPM)
 }
+print(sl/dat1$ngroups)
+
+load("results_dat1_np.RData")
+
+sl <- 0
+for(k in 1:dat1$ngroups) {
+    UkList <- resDat1NP$Usamps[, , k, 101:200]
+    OmegaList <- resDat1NP$omegaSamps[, k, 101:200]
+    s2list <- resDat1NP$s2samps[k, 101:200]
+    SigmaInvPM <- getPostMeanSigmaInv(P, UkList, OmegaList, s2list, 100)
+    sl <- sl+steinsLoss(dat1$SigmaList[[k]], SigmaInvPM)
+}
+print(sl/dat1$ngroups)
 
 load("results_dat1_cp.RData")
 
-Uk <- resDat1CP$Usamps[, , 1, 200]
-Omega <- resDat1CP$omegaSamps[, 1, 200]
-s2 <- resDat1SS$s2samps[1, 200]
-SigmaInvHat <- getSigmaInv(P, Uk, Omega, s2)
+UkList <- resDat1CP$Usamps[, , 1, 101:200]
+OmegaList <- resDat1CP$omegaSamps[, 1, 101:200]
+s2list <- resDat1CP$s2samps[1, 101:200]
+SigmaInvPM <- getPostMeanSigmaInv(P, UkList, OmegaList, s2List, 100)
 
+sl <- 0
 for(k in 1:dat1$ngroups) {
-    print(steinsLoss(dat1$SigmaList[[k]], SigmaInvHat))
+    sl <- sl + steinsLoss(dat1$SigmaList[[k]], SigmaInvPM)
 }
+print(sl/dat1$ngroups) 
 
+###############################################################
 
 load("results_dat2_ss.RData")
 
 sl <- 0
 for(k in 1:dat2$ngroups) {
-    Uk <- resDat2SS$Usamps[, , k, 200]
-    Omega <- resDat2SS$omegaSamps[, k, 200]
-    s2 <- resDat2SS$s2samps[k, 200]
-    SigmaInvHat <- getSigmaInv(P, Uk, Omega, s2)
-    sl <- sl+steinsLoss(dat2$SigmaList[[k]], SigmaInvHat)
+    UkList <- resDat2SS$Usamps[, , k, 101:200]
+    OmegaList <- resDat2SS$omegaSamps[, k, 101:200]
+    s2list <- resDat2SS$s2samps[k, 101:200]
+    SigmaInvPM <- getPostMeanSigmaInv(P, UkList, OmegaList, s2list, 100)
+    sl <- sl+steinsLoss(dat2$SigmaList[[k]], SigmaInvPM)
+}
+print(sl/dat2$ngroups)
+
+
+load("results_dat2_np.RData")
+
+sl <- 0
+for(k in 1:dat2$ngroups) {
+    UkList <- resDat2NP$Usamps[, , k, 101:200]
+    OmegaList <- resDat2NP$omegaSamps[, k, 101:200]
+    s2list <- resDat2NP$s2samps[k, 101:200]
+    SigmaInvPM <- getPostMeanSigmaInv(P, UkList, OmegaList, s2list, 100)
+    sl <- sl+steinsLoss(dat2$SigmaList[[k]], SigmaInvPM)
 }
 print(sl/dat2$ngroups)
 
 load("results_dat2_cp.RData")
 
-Uk <- resDat2CP$Usamps[, , 1, 200]
-Omega <- resDat2CP$omegaSamps[, 1, 200]
-s2 <- resDat2SS$s2samps[1, 200]
-SigmaInvHat <- getSigmaInv(P, Uk, Omega, s2)
+UkList <- resDat2CP$Usamps[, , 1, 101:200]
+OmegaList <- resDat2CP$omegaSamps[, 1, 101:200]
+s2list <- resDat2CP$s2samps[1, 101:200]
+SigmaInvPM <- getPostMeanSigmaInv(P, UkList, OmegaList, s2list, 100)
 
 sl <- 0
 for(k in 1:dat2$ngroups) {
-    sl <- sl + steinsLoss(dat2$SigmaList[[k]], SigmaInvHat)
+    sl <- sl + steinsLoss(dat2$SigmaList[[k]], SigmaInvPM)
 }
 print(sl / dat2$ngroups)

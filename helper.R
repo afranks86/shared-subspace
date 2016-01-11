@@ -466,3 +466,18 @@ getSigmaInv <- function(P, U, Omega, s2) {
     s2*(diag(P) - U %*% diag(Omega) %*% t(U))
     
 }
+
+getPostMeanSigmaInv <- function(P, Ulist, OmegaList, s2vec, nsamps) {
+    SigmaInvList <- lapply(1:nsamps, function(i) {
+        s2vec[i]*(diag(P) - Ulist[, , i] %*% diag(omega) %*% t(Ulist[, , i]))
+    })
+    apply(simplify2array(SigmaInvList), c(1, 2), mean)
+}
+
+getPostMeanSigma <- function(P, Ulist, OmegaList, s2vec) {
+
+    SigmaList <- sapply(1:nsamps, function(i) {
+        s2vec[i]*(Ulist[, , i] %*% diag((1-omega)/omega) %*% t(Ulist[, , i]) + diag(P))
+    })
+    apply(simplify2array(SigmaList), c(1, 2), mean)
+}
