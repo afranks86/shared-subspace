@@ -1,5 +1,6 @@
 library(rstan)
-load("compiledVectorBMF.Rdata")
+
+stanstart <- stan(file="vectorBMF.stan", data=list(M=9,lam=rep(1,10), gamma=rep(1, 10)), chains=1, iter=1)
 
 tr <- function(X) { sum(diag(X)) }
 
@@ -343,7 +344,7 @@ R.rbmf.vector.hmc <- function (A, c, x, iter=10) {
     d <- as.numeric( t(E) %*% c )
 
     sink("/dev/null");
-    results <- stan(fit=compiledVectorBMF, data=list(M=length(y)-1,lam=l, gamma=d), chains=1, iter=iter)
+    results <- stan(fit=stanstart, data=list(M=length(y)-1,lam=l, gamma=d), chains=1, iter=iter)
     sink()
     samps <- extract(results)$Y
 
@@ -467,9 +468,9 @@ getSigmaInv <- function(P, U, Omega, s2) {
     
 }
 
-getPostMeanSigmaInv <- function(P, Ulist, OmegaList, s2vec, nsamps) {
+getPostMeanSigmaInv <- function(P, USamps, OmegaSamps, s2vec, nsamps) {
     SigmaInvList <- lapply(1:nsamps, function(i) {
-        s2vec[i]*(diag(P) - Ulist[, , i] %*% diag(omega) %*% t(Ulist[, , i]))
+        s2vec[i]*(diag(P) - USamps[, , i] %*% diag(OmegaSamps[, i]) %*% t(USamps[, , i]))
     })
     apply(simplify2array(SigmaInvList), c(1, 2), mean)
 }

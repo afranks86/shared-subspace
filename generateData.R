@@ -6,14 +6,16 @@
 ## LambdaList - list of length ngroups, each a vec of evals length R
 ## Olist - 
 
+library(rstiefel)
+library(mvtnorm)
+library(rstiefel)
+source("helper.R")
+
 generateData <- function(P=200, S=10, R=S, ngroups=10, nvec=rep(100, ngroups),
                          V=rbind(diag(S), matrix(0, nrow=P-S, ncol=S)),
                          s2vec=rep(1, ngroups), LambdaList=NULL, Olist=NULL) {
 
-    library(rstiefel)
-    library(mvtnorm)
-    library(rstiefel)
-    source("helper.R")
+
 
     if( is.null(LambdaList) ) {
         LambdaList <- vector("list", ngroups)
@@ -68,7 +70,7 @@ generateData <- function(P=200, S=10, R=S, ngroups=10, nvec=rep(100, ngroups),
 
 if( FALSE ) {
 
-    source("helper.R")
+
     genData <- generateData()
     ## Sample only Conditionals
     
