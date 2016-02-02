@@ -23,16 +23,24 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
         Vinit[1:S,1:S] <- diag(S)
 
         OmegaList <- Olist <- Ulist <- list()
-        for(k in 1:ngroups) {
-            OmegaList[[k]] <- rep(1/2, R)
 
-            Ok <- matrix(0, nrow=S, ncol=R)
-            Ok[1:R, 1:R] <- diag(R)
 
-            Olist[[k]] <- Ok
-            Ulist[[k]] <- V %*% Ok
-        }
-        s2vec <- rexp(ngroups)  
+
+      SigInvInitList <- list()
+      s2vec <- rexp(ngroups)  
+      for(k in 1:ngroups) {
+        OmegaList[[k]] <- rep(1/2, R)
+
+        Ok <- matrix(0, nrow=S, ncol=R)
+        Ok[1:R, 1:R] <- diag(R)
+
+        Olist[[k]] <- Ok
+        Ulist[[k]] <- V %*% Ok
+
+        SigInvInitList[[k]] <-
+          getSigmaInv(P, Ulist[[k]], OmegaList[[k]], s2vec[k])
+      }
+
 
         init <- list(V=Vinit, Ulist=Ulist, OmegaList=OmegaList, s2vec=s2vec)
         
@@ -41,6 +49,14 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
         ## To Finish
     }
 
+  sigmaTruthInvList <- NULL
+  if(!is.null(sigmaTruthList)) {
+    sigmaTruthInvList <- list()
+    for(k in 1:ngroups) {
+      sigmaTruthInvList[[k]] <- solve(sigmaTruthList[[k]])
+    }
+  }
+  
     V <- init$V
     Ulist <- init$Ulist
     Olist <- lapply(Ulist, function(u) t(V) %*% u)
@@ -102,15 +118,24 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
         
         if(i%%nskip==0 & verbose) {
             sl <- 0
-            if(is.null(sigmaTruthList)) {
+            if(is.null(sigmaTruthInvList)) {
                 for(k in 1:ngroups) {
-                    SigInv <- getSigmaInv(P, Ulist[[k]], OmegaList[[k]], s2vec[[k]])
-                    sl <- sl + steinsLoss(initSigmaList[[k]], SigInv)
+
+                  omegak <- OmegaList[[k]]
+                    SigHat <- s2vec[k]*(Ulist[[k]] %*%
+                                        diag(omegak/(1-omegak)) %*%
+                                        t(Ulist[[k]])+diag(P))
+                  sl <- sl + steinsLoss(SigHat, )
                 }
             } else {
                 for(k in 1:ngroups) {
-                    SigInv <- getSigmaInv(P, Ulist[[k]], OmegaList[[k]], s2vec[[k]])
-                    sl <- sl + steinsLoss(sigmaTruthList[[k]], SigInv)
+                  omegak <- OmegaList[[k]]
+                  SigHat <- s2vec[k]*(Ulist[[k]] %*%
+                                      diag(omegak/(1-omegak)) %*%
+                                      t(Ulist[[k]])+diag(P))
+
+                  sl <- sl + steinsLoss(SigHat, sigmaTruthInvList[[k]])
+
                 }
             }
             print(sprintf("Iteration %i, Loss %f", i, sl/ngroups))
@@ -123,53 +148,79 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
 }
 
 ## bayesian single group estimation
-fitBayesianSpike <- function(P, S, R, SC, n, niters=100, nskip=1, init=NULL,
-                             verbose=FALSE) {
+fitBayesianSpike <- function(P, S, R, SC, n, niters=100, nskip=1,
+                             init=NULL, SigmaTruth=NULL,
+                             verbose=TRUE) {
 
-    niters <- niters
-    nskip <- nskip
-    nsamps <- floor(niters/nskip)
+  niters <- niters
+  nskip <- nskip
+  nsamps <- floor(niters/nskip)
 
-    Usamps <- array(dim=c(P, R, nsamps))
-    omegaSamps <- matrix(nrow=R, ncol=nsamps)
-    s2samps <- numeric(nsamps)
+  Usamps <- array(dim=c(P, R, nsamps))
+  omegaSamps <- matrix(nrow=R, ncol=nsamps)
+  s2samps <- numeric(nsamps)
 
-    initItems <- c("U", "omega", "s2")
-    if( is.null(init) ) {
-        U <- rustiefel(P, R)
-        s2 <- rexp(1)
-        omega <- rep(1/2, R)
-        init <- list(U=U, omega=omega, s2=s2)
+  initItems <- c("U", "omega", "s2")
+  if( is.null(init) ) {
+    U <- rustiefel(P, R)
+    s2 <- rexp(1)
+    omega <- rep(1/2, R)
+    init <- list(U=U, omega=omega, s2=s2)
+    
+  } else if (any(!(initItems %in% names(init)))) {
+    stop("Some parameters unintialized!")
+  }
+
+  SigmaTruthInv <- NULL
+  if( !is.null(SigmaTruth) ) {
+    SigmaTruthInv <- solve(SigmaTruth)
+  }
+  
+  s2 <- init$s2
+  U <- init$U
+  omega <- init$omega
+
+  SigInvInit <- getSigmaInv(P, init$U, init$omega, init$s2)
+  
+  for ( i in 1:niters ) {
+
+    ## Sample sigma^2_k
+    
+    s2 <- sampleSigma2(SC, U, omega, n)
+
+    U <- rbing.matrix.gibbs(SC/(2*s2), diag(omega), U)
+
+    omega <- sampleOmega(SC, U, s2, n)
+
+    if(i%%nskip==0 & verbose) {
+
+      Usamps[, , i/nskip] <- U
+      omegaSamps[, i/nskip] <- omega
+      s2samps[i/nskip] <- s2
+      
+      sl <- 0
+      if(is.null(SigmaTruthInv)) {
+
+        SigHat <- s2*(U %*% diag(omega/(1-omega)) %*% t(U)+diag(P))
+        sl <- sl + steinsLoss(SigHat, SigInvInit)
         
-    } else if (any(!(initItems %in% names(init)))) {
-        stop("Some parameters unintialized!")
+      } else {
+
+        SigHat <- s2*(U %*% diag(omega/(1-omega)) %*% t(U)+diag(P))
+        sl <- sl + steinsLoss(SigHat, SigmaTruthInv)
+
+      }
+
+      print(sprintf("Iteration %i, Loss %f", i, sl))
+    
     }
 
-    s2 <- init$s2
-    U <- init$U
-    omega <- init$omega
-    
-    for ( i in 1:niters ) {
 
-        ## Sample sigma^2_k
-        
-        s2 <- sampleSigma2(SC, U, omega, n)
+  }
 
-        U <- rbing.matrix.gibbs(SC/(2*s2), diag(omega), U)
+  list(S=S, R=R, init=init, Usamps=Usamps, omegaSamps=omegaSamps, s2samps=s2samps)
 
-        omega <- sampleOmega(SC, U, s2, n)
-        
-        ## save samples        
-        if(i %% nskip==0) {
-            Usamps[, , i/nskip] <- U
-            omegaSamps[, i/nskip] <- omega
-            s2samps[i/nskip] <- s2
-
-            if( verbose ) { print(i) }
-        }
-        
-    }
-    
-    list(S=S, R=R, init=init, Usamps=Usamps, omegaSamps=omegaSamps, s2samps=s2samps)
 }
+
+
 

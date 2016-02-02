@@ -91,7 +91,6 @@ save(dat, file=sprintf("/n/airoldifs2/lab/afranks/simDat%i.RData", datType))
 ############# Data Fit #########################
 ########################################################
 
-
 resList <- list()
 lossVec <- numeric(3)
 
@@ -133,11 +132,15 @@ for(fitType in 1:3) {
       UkSamps <- res$Usamps[, , k, (nwarmup+1):niters]
       OmegaSamps <- res$omegaSamps[, k, (nwarmup+1):niters]
       s2list <- res$s2samps[k, (nwarmup+1):niters]
-      SigmaInvPM <- getPostMeanSigmaInv(P, UkSamps, OmegaSamps,
-                                        s2list, (niters-nwarmup))
-      loss <- loss + steinsLoss(dat$SigmaList[[k]], SigmaInvPM)
+
+      SigmaInvK <- getSigmaInv(dat$P, dat$Ulist[[k]],
+                               dat$OmegaList[[k]], dat$s2vec[k])
+      SigmaHatInvPM <- getPostMeanSigmaInv(P, UkSamps, OmegaSamps,
+                                        s2list, niters-nwarmup)
+      loss <- loss + steinsLoss(solve(SigmaHatInvPM), SigmaInvK)
+      
     }
-    loss <- loss/dat$ngroups
+    loss <- loss/ngroups
 
     lossVec[1] <- loss
     resList[[1]] <- res
@@ -155,26 +158,47 @@ for(fitType in 1:3) {
     Slist <- Ulist <- OmegaList <- list()
     Slist[[1]] <- t(Ypooled) %*% Ypooled
     OmegaList[[1]] <- rep(1/2, S)
-    V <- initSS$V
-    Ulist[[1]] <- initSS$Ulist[[1]]
-    nvec <- sum(nvec)
+    
+    Vinit <- matrix(0,nrow=P,ncol=S)
+    Vinit[1:S, 1:S] <- diag(S)
+    Oinit <- rustiefel(S, R)
+    Uinit <- Vinit %*% Oinit
+    
+    Ulist[[1]] <- Uinit
+    nvec <- sum(dat$nvec)
     s2vec <- rexp(1)
 
     initCP <- list(V=Vinit, Ulist=Ulist, OmegaList=OmegaList, s2vec=s2vec)
+    resk <- fitBayesianSpike(dat$P, dat$S, dat$R, Slist[[1]],
+                             nvec, niters=niters)
 
-    ## fit dat 
-    res <- fitSubspace(dat$P, dat$S, dat$R, Slist, nvec,
-                       ngroups=1, init=initCP, niters=niters,
-                       sigmaTruthList=dat$SigmaList)
+    Usamps <- array(dim=c(dat$P, dat$R, dat$ngroups, niters))
+    omegaSamps <- array(dim=c(dat$R, dat$ngroups, ncol=niters))
+    s2samps <- matrix(nrow=dat$ngroups, ncol=niters)
 
+    for(k in 1:dat$ngroups) {
+      Usamps[, , k, ] <- resk$Usamps
+      omegaSamps[, k, ] <- resk$omegaSamps
+      s2samps[k, ] <- resk$s2samps
+    }
+
+    res <- list(S=dat$S, R=dat$R, ngroups=dat$ngroups)
+    res$Usamps <- Usamps
+    res$omegaSamps <- omegaSamps
+    res$s2samps <- s2samps
+    
+    SigmaHatInvPM <- getPostMeanSigmaInv(P, resk$Usamps,
+                                         resk$omegaSamps,
+                                         resk$s2samps, (niters-nwarmup))
+    
     loss <- 0
-    UkSamps <- res$Usamps[, , 1, (nwarmup+1):niters]
-    OmegaSamps <- res$omegaSamps[, 1, (nwarmup+1):niters]
-    s2list <- res$s2samps[1, (nwarmup+1):niters]
-    SigmaInvPM <- getPostMeanSigmaInv(P, UkSamps, OmegaSamps,
-                                      s2list, (niters-nwarmup))
-    loss <- steinsLoss(dat$SigmaList[[k]], SigmaInvPM)
-
+    for(k in 1:dat$ngroups) {
+      SigmaInvK <- getSigmaInv(dat$P, dat$Ulist[[k]],
+                               dat$OmegaList[[k]], dat$s2vec[k])
+      loss <- loss + steinsLoss(solve(SigmaHatInvPM), SigmaInvK)
+    }
+    loss <- loss/dat$ngroups
+    
     lossVec[2] <- loss
     resList[[2]] <- res
     
@@ -192,7 +216,8 @@ for(fitType in 1:3) {
     for(k in 1:dat$ngroups) {
       
       resk <- fitBayesianSpike(dat$P, dat$S, dat$R, dat$Slist[[k]],
-                               dat$nvec[k], niters=niters)
+                               dat$nvec[k], niters=niters,
+                               SigmaTruth=dat$SigmaTruthList[[k]])
       
       Usamps[, , k, ] <- resk$Usamps
       omegaSamps[, k, ] <- resk$omegaSamps
@@ -206,13 +231,16 @@ for(fitType in 1:3) {
 
     loss <- 0
     for(k in 1:dat$ngroups) {
-      
+
       UkSamps <- res$Usamps[, , k, (nwarmup+1):niters]
       OmegaSamps <- res$omegaSamps[, k, (nwarmup+1):niters]
       s2list <- res$s2samps[k, (nwarmup+1):niters]
-      SigmaInvPM <- getPostMeanSigmaInv(P, UkSamps, OmegaSamps,
+      
+      SigmaInvK <- getSigmaInv(dat$P, dat$Ulist[[k]],
+                               dat$OmegaList[[k]], dat$s2vec[k])
+      SigmaHatInvPM <- getPostMeanSigmaInv(P, UkSamps, OmegaSamps,
                                         s2list, niters-nwarmup)
-      loss <- loss + steinsLoss(dat$SigmaList[[k]], SigmaInvPM)
+      loss <- loss + steinsLoss(solve(SigmaHatInvPM), SigmaInvK)
     }
     loss <- loss/dat$ngroups
 

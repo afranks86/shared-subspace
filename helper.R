@@ -464,13 +464,13 @@ steinsLoss <- function(C1, C2inv) {
 
 getSigmaInv <- function(P, U, Omega, s2) {
     
-    s2*(diag(P) - U %*% diag(Omega) %*% t(U))
+    1/s2*(diag(P) - U %*% diag(Omega) %*% t(U))
     
 }
 
 getPostMeanSigmaInv <- function(P, USamps, OmegaSamps, s2vec, nsamps) {
     SigmaInvList <- lapply(1:nsamps, function(i) {
-        s2vec[i]*(diag(P) - USamps[, , i] %*% diag(OmegaSamps[, i]) %*% t(USamps[, , i]))
+        1/s2vec[i]*(diag(P) - USamps[, , i] %*% diag(OmegaSamps[, i]) %*% t(USamps[, , i]))
     })
     apply(simplify2array(SigmaInvList), c(1, 2), mean)
 }

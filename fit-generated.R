@@ -1,7 +1,23 @@
+#!/usr/bin/env Rscript
+
+#SBATCH -n 4  #Number of cores
+#SBATCH -N 1  #Number of cores 
+#SBATCH -t 15000  #Runtime in minutes
+#SBATCH -J test_heatshock
+#SBATCH -o outfiles/new_heatshock_%a.out #Standard output
+#SBATCH -e outfiles/new_heatshock_%a.err #Standard error
+#SBATCH -p airoldi,stats #Partition to submit to 
+#SBATCH --mem=10000  #Memory per node in MB (see also --mem-per-cpu)
+#SBATCH -a 1-6
+
 rm(list=ls())
 source("fit-subspace.R")
 source("generateData.R")
 source("helper.R")
+
+idx <- as.numeric(Sys.getenv("SLURM_ARRAY_TASK_ID"))
+
+datType <- (idx-1) %% 3 + 1
 
 ########################################################
 ############# Data Generation #########################
