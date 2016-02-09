@@ -1,5 +1,7 @@
 library(rstan)
 
+library(mvtnorm)
+
 stanstart <- stan(file="vectorBMF.stan", data=list(M=9,lam=rep(1,10), gamma=rep(1, 10)), chains=1, iter=1)
 
 tr <- function(X) { sum(diag(X)) }
@@ -228,7 +230,8 @@ sampleV <- function(Slist, Ulist, s2vec, OmegaList, V, method="gibbs") {
 
     ## Randomly sample a column,  i
     for( i in sample(1:S) ) {
-        N <- NullC(V[, -i])
+
+      N <- NullC(V[, -i])
 
         ## Get the linear term
         ## for j neq i
@@ -257,7 +260,7 @@ sampleV <- function(Slist, Ulist, s2vec, OmegaList, V, method="gibbs") {
         Atilde <- t(N)%*%A%*%N
 
         NV <- as.vector(t(N)%*%V[, i])
-        
+      
         if( method == "gibbs" ) {
             V[, i] <- N %*% R.rbmf.vector.gibbs(Atilde, Ctilde, NV)
         } else if( method == "hmc" ) {
@@ -265,7 +268,6 @@ sampleV <- function(Slist, Ulist, s2vec, OmegaList, V, method="gibbs") {
         } else {
             stop("Unknown method")
         }
-        ## print(i)
     }
 
     V
@@ -337,19 +339,23 @@ R.rbmf.vector.gibbs <- function (A, c, x) {
 R.rbmf.vector.hmc <- function (A, c, x, iter=10) {
 
     evdA <- eigen(A)
+  
     E <- evdA$vec
     l <- evdA$val
     l[l < 0] <- 0
     y <- t(E) %*% x
     d <- as.numeric( t(E) %*% c )
-
+  
     sink("/dev/null");
-    results <- stan(fit=stanstart, data=list(M=length(y)-1,lam=l, gamma=d), chains=1, iter=iter)
+    results <- stan(fit=stanstart,
+                    data=list(M=length(y)-1, lam=l, gamma=d),
+                    chains=1, iter=iter)
     sink()
-    samps <- extract(results)$Y
+  
+    samps <- extract(results, permuted=FALSE)
 
     ## Use the last sample
-    y <- samps[nrow(samps),]
+    y <- samps[nrow(samps), ]
 
     x <- E %*% y
     x/sqrt(sum(x^2))
@@ -371,7 +377,7 @@ R.ry_bmf <- function(y, l, d, n) {
             a <- a-l[j]*y[j]^2*omyi
             b <- b+y[j]*d[j]*smyi
         }
-        ## print(i)
+
         theta <- R.rtheta_bmf.mh(k, a, b, abs(d[i]))
         for(j in 1:n){
             y[j] <- y[j]*sqrt(1-theta)*smyi
@@ -451,7 +457,8 @@ R.rtheta_bmf.mh <- function(k, a, b, c, steps=50) {
         curve(lprop(x)-optimize(function(x) lprop(x)-f(x),interval=c(0,1))$objective,col="red",add=TRUE)
         
     }
-    print(reject/steps)
+
+  ##print(reject/steps)
     
     thCur
 }
@@ -481,4 +488,79 @@ getPostMeanSigma <- function(P, Ulist, OmegaList, s2vec) {
         s2vec[i]*(Ulist[, , i] %*% diag((1-omega)/omega) %*% t(Ulist[, , i]) + diag(P))
     })
     apply(simplify2array(SigmaList), c(1, 2), mean)
+}
+
+## Get mean predictions for each group relative to truth
+makePrediction <- function(Usamps, omegaSamps, s2samps, SigmaTrueList,
+                           genGroup=1, n=20,
+                           ngroups=dim(Usamps)[3],
+                           nsamps=dim(Usamps)[4],
+                           numToAvg=nsamps/2) {
+
+  
+  Yk <- rmvnorm(n, sigma=SigmaTrueList[[genGroup]])
+  SigmaHatList <- list()
+
+  probs <- rep(0, ngroups)
+  for(i in (nsamps-numToAvg+1):nsamps) {
+
+      for(k  in 1:ngroups) {
+
+        U <- Usamps[, , k, i]
+        om <- omegaSamps[, k, i]
+        Lam <- diag(om/(1-om))
+        s2 <- s2samps[k, i]
+        SigmaHatList[[k]] <- U %*% Lam %*% t(U) + s2*diag(nrow(Usamps))
+      }
+    probs <- probs +
+      rowMeans(computeMembershipProbabilities(SigmaHatList, Yk))
+  }
+  probs <- probs / numToAvg
+
+  probs
+
+}
+
+computeMembershipProbabilities <-
+
+  function(SigmaList, Y,
+           priorWeights=rep(1/length(SigmaList), length(SigmaList))) {
+
+    priorWeights <- priorWeights / sum(priorWeights)
+    unnormalizedProbs <- sapply(SigmaList, function(Sigma) {
+      dmvnorm(Y, sigma=Sigma, log=TRUE)
+    })
+
+    if( !class(unnormalizedProbs) == "matrix")
+      unnormalizedProbs <- matrix(unnormalizedProbs, nrow=1, ncol=10)
+    
+    probs <- apply(unnormalizedProbs, 1, function(probVec) {
+      normProbs <- probVec - max(probVec)
+      normProbs <- exp(normProbs) * priorWeights /
+        sum(exp(normProbs) * priorWeights)
+    
+      normProbs
+    })
+
+    probs
+}
+
+
+## Optimal threshold from Gavish, Donoho 2014
+getRank <- function(Y) {
+
+  svals <- svd(Y)$d
+
+  m <- max(nrow(Y), ncol(Y))
+  n <- min(nrow(Y), ncol(Y))
+  
+  if(m==n) {
+    rank <- sum(svals > 2.858*median(svals))
+  } else {
+    beta <- n/m
+    omeg <- 0.56*beta^3 - 0.95*beta^2 + 1.82*beta + 1.43
+    rank <- sum(svals > omeg*median(svals))
+  }
+
+  rank
 }

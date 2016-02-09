@@ -8,7 +8,7 @@
 #SBATCH -e outfiles/ssg_%a.err #Standard error
 #SBATCH -p airoldi,stats #Partition to submit to 
 #SBATCH --mem=10000  #Memory per node in MB (see also --mem-per-cpu)
-#SBATCH -a 1-300
+#SBATCH -a 1-99
 
 rm(list=ls())
 idx <- as.numeric(Sys.getenv("SLURM_ARRAY_TASK_ID"))
@@ -35,9 +35,10 @@ S <- 10
 R <- 10
 P <- 200
 ngroups <- 10
-evals <- c(250, 125, 50, 30, 30 ,30, 20, 20, 20, 20)
+evals <- c(250, 125, 50, 30, 30, 30, 20, 20, 20, 20)
+## evals <- c(250, 125, 50, 30, 30)
 
-niters <- 1000
+niters <- 100
 nwarmup <- niters/2
 
 ## For all models Sigma_k = s2(Psi_k + diag(P))
@@ -52,6 +53,7 @@ if(datType==1) {
   
   dat <- generateData(P=P, S=S, R=R, ngroups=ngroups,
                       LambdaList=LambdaList, nvec=rep(n, ngroups))
+
   
 } else if(datType==2) {
 
@@ -83,6 +85,13 @@ if(datType==1) {
   
 }
 
+
+Ypooled <- c()
+for(i in 1:length(dat$Ylist)){
+  Ypooled <- rbind(Ypooled, dat$Ylist[[i]])
+}
+dat$Ypooled <- Ypooled
+
 print("Saving data...")
 save(dat, file=sprintf("/n/airoldifs2/lab/afranks/simDat%i.RData", datType))
 
@@ -102,14 +111,15 @@ for(fitType in 1:3) {
     ## Initialize sampler
 
     P <- dat$P
-    S <- dat$S
-    R <- dat$R
+    S <- R <- getRank(dat$Ypooled)
+    ## S <- dat$S
+    ## R <- dat$R
     ngroups <- dat$ngroups
     nvec <- dat$nvec
     Slist <- dat$Slist
 
     Vinit <- matrix(0,nrow=P,ncol=S)
-    Vinit[1:S,1:S] <- diag(S)
+    Vinit[(P-S+1):P, 1:S] <- diag(S)
 
     OmegaList <- Ulist <- list()
     for(k in 1:ngroups) {
@@ -125,7 +135,8 @@ for(fitType in 1:3) {
     initSS <- list(V=Vinit, Ulist=Ulist, OmegaList=OmegaList, s2vec=s2vec)
     res <- fitSubspace(dat$P, dat$S, dat$R, dat$Slist,
                        dat$nvec, dat$ngroups, init=initSS,
-                       niters=niters, sigmaTruthList=dat$SigmaList)
+                       niters=niters, sigmaTruthList=dat$SigmaList,
+                       draw=c(V=TRUE), Vmode="gibbs")
     loss <- 0
     for(k in 1:dat$ngroups) {
       
@@ -148,12 +159,10 @@ for(fitType in 1:3) {
   } else if (fitType == 2) {
 
 ####### FIT DATA USING COMPLETE POOLING ###############
-
-    Ylist <- dat$Ylist
-    Ypooled <- c()
-    for(i in 1:length(Ylist)){
-      Ypooled <- rbind(Ypooled, Ylist[[i]])
-    }
+    P <- dat$P
+    S <- R <- getRank(dat$Ypooled)
+    ## S <- dat$S
+    ## R <- dat$R
 
     Slist <- Ulist <- OmegaList <- list()
     Slist[[1]] <- t(Ypooled) %*% Ypooled
@@ -182,7 +191,7 @@ for(fitType in 1:3) {
       s2samps[k, ] <- resk$s2samps
     }
 
-    res <- list(S=dat$S, R=dat$R, ngroups=dat$ngroups)
+    res <- list(S=S, R=R, ngroups=dat$ngroups)
     res$Usamps <- Usamps
     res$omegaSamps <- omegaSamps
     res$s2samps <- s2samps
@@ -206,6 +215,11 @@ for(fitType in 1:3) {
 
 #################  Fit Data Using No Pooling ########################
 
+    P <- dat$P
+    S <- R <- getRank(dat$Ypooled)
+    ## S <- dat$S
+    ## R <- dat$R
+    
     nsamps <- niters
     res <- list(S=dat$S, R=dat$R, ngroups=dat$ngroups)
 
@@ -215,7 +229,7 @@ for(fitType in 1:3) {
     
     for(k in 1:dat$ngroups) {
       
-      resk <- fitBayesianSpike(dat$P, dat$S, dat$R, dat$Slist[[k]],
+      resk <- fitBayesianSpike(dat$P, S, R, dat$Slist[[k]],
                                dat$nvec[k], niters=niters,
                                SigmaTruth=dat$SigmaTruthList[[k]])
       
@@ -251,7 +265,5 @@ for(fitType in 1:3) {
 
   print(sprintf("Finished fitting %i", fitType))
   save(resList, dat, lossVec, datType,
-       file=sprintf("/n/airoldifs2/lab/afranks/shared_subspace/results-%i-%i.RData", datType, idx))
+       file=sprintf("/n/airoldifs2/lab/afranks/shared_subspace/adaptive-%i-%i.RData", datType, idx))
 }
-
-
