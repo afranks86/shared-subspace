@@ -21,7 +21,7 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
     if( is.null(init) ) {
 
         Vinit <- matrix(0,nrow=P, ncol=S)
-        Vinit[1:S,1:S] <- diag(S)
+        Vinit[1:S, 1:S] <- diag(S)
 
         OmegaList <- Olist <- Ulist <- list()
 

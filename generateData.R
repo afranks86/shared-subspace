@@ -45,7 +45,6 @@ generateData <- function(P=200, S=10, R=S, ngroups=10, nvec=rep(100, ngroups),
         }
 
         Ok <- Olist[[k]]
-        
         Uk <- V%*%Ok
         Ulist[[k]] <- Uk
         Lamk <- LambdaList[[k]]

@@ -394,7 +394,7 @@ R.rtheta_bmf.mh <- function(k, a, b, c, steps=50) {
     u <- Inf
     g <- k
 
-    if(a>0) {
+    if(a > 0) {
         g <- max(1/(1+log(2+a)),k-a)
     }
     count <- 1
@@ -492,18 +492,19 @@ getPostMeanSigma <- function(P, Ulist, OmegaList, s2vec) {
 
 ## Get mean predictions for each group relative to truth
 makePrediction <- function(Usamps, omegaSamps, s2samps, SigmaTrueList,
-                           genGroup=1, n=20,
                            ngroups=dim(Usamps)[3],
+                           genGroups=(1:ngroups), n=20,
                            nsamps=dim(Usamps)[4],
                            numToAvg=nsamps/2) {
 
-  
-  Yk <- rmvnorm(n, sigma=SigmaTrueList[[genGroup]])
-  SigmaHatList <- list()
-
-  probs <- rep(0, ngroups)
-  for(i in (nsamps-numToAvg+1):nsamps) {
-
+  predictionMat <- matrix(0, nrow=length(genGroups), ncol=ngroups)
+  for(group in 1:length(genGroups)) {
+    Yk <- rmvnorm(n, sigma=SigmaTrueList[[genGroups[group]]])
+    SigmaHatList <- list()
+    
+    probs <- rep(0, ngroups)
+    for(i in (nsamps-numToAvg+1):nsamps) {
+      
       for(k  in 1:ngroups) {
 
         U <- Usamps[, , k, i]
@@ -512,13 +513,15 @@ makePrediction <- function(Usamps, omegaSamps, s2samps, SigmaTrueList,
         s2 <- s2samps[k, i]
         SigmaHatList[[k]] <- U %*% Lam %*% t(U) + s2*diag(nrow(Usamps))
       }
-    probs <- probs +
-      rowMeans(computeMembershipProbabilities(SigmaHatList, Yk))
+      probs <- probs +
+        rowMeans(computeMembershipProbabilities(SigmaHatList, Yk))
+    }
+    probs <- probs / numToAvg
+
+    predictionMat[group, ] <- probs
   }
-  probs <- probs / numToAvg
 
-  probs
-
+  predictionMat
 }
 
 computeMembershipProbabilities <-

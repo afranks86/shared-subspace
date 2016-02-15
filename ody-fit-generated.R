@@ -31,14 +31,16 @@ datType <- ((idx-1) %% 3) + 1
 ########################################################
 
 n <- 20
-S <- 10
-R <- 10
-P <- 200
-ngroups <- 10
-evals <- c(250, 125, 50, 30, 30, 30, 20, 20, 20, 20)
+S <- 2
+R <- 2
+P <- 20
+ngroups <- 5
+
+evals <- c(250, 20)
+##evals <- c(250, 125, 50, 30, 30, 30, 20, 20, 20, 20)
 ## evals <- c(250, 125, 50, 30, 30)
 
-niters <- 100
+niters <- 50
 nwarmup <- niters/2
 
 ## For all models Sigma_k = s2(Psi_k + diag(P))
@@ -133,10 +135,13 @@ for(fitType in 1:3) {
     s2vec <- rexp(ngroups)
 
     initSS <- list(V=Vinit, Ulist=Ulist, OmegaList=OmegaList, s2vec=s2vec)
-    res <- fitSubspace(dat$P, dat$S, dat$R, dat$Slist,
+    res <- fitSubspace(dat$P, S, R, dat$Slist,
                        dat$nvec, dat$ngroups, init=initSS,
                        niters=niters, sigmaTruthList=dat$SigmaList,
                        draw=c(V=TRUE), Vmode="gibbs")
+    
+    res$predictions <- makePrediction(res$Usamps, res$omegaSamps,
+                                  res$s2samps, dat$SigmaList, n=100)
     loss <- 0
     for(k in 1:dat$ngroups) {
       
@@ -178,11 +183,11 @@ for(fitType in 1:3) {
     s2vec <- rexp(1)
 
     initCP <- list(V=Vinit, Ulist=Ulist, OmegaList=OmegaList, s2vec=s2vec)
-    resk <- fitBayesianSpike(dat$P, dat$S, dat$R, Slist[[1]],
+    resk <- fitBayesianSpike(dat$P, S, R, Slist[[1]],
                              nvec, niters=niters)
 
-    Usamps <- array(dim=c(dat$P, dat$R, dat$ngroups, niters))
-    omegaSamps <- array(dim=c(dat$R, dat$ngroups, ncol=niters))
+    Usamps <- array(dim=c(dat$P, R, dat$ngroups, niters))
+    omegaSamps <- array(dim=c(R, dat$ngroups, ncol=niters))
     s2samps <- matrix(nrow=dat$ngroups, ncol=niters)
 
     for(k in 1:dat$ngroups) {
@@ -195,6 +200,10 @@ for(fitType in 1:3) {
     res$Usamps <- Usamps
     res$omegaSamps <- omegaSamps
     res$s2samps <- s2samps
+
+    res$predictions <- makePrediction(res$Usamps, res$omegaSamps,
+                                      res$s2samps, dat$SigmaList, n=100)
+
     
     SigmaHatInvPM <- getPostMeanSigmaInv(P, resk$Usamps,
                                          resk$omegaSamps,
@@ -216,12 +225,19 @@ for(fitType in 1:3) {
 #################  Fit Data Using No Pooling ########################
 
     P <- dat$P
-    S <- R <- getRank(dat$Ypooled)
+
+    ## All groups assumed to have same rank, take largest
+    SRvec <- c()
+    for(k  in 1:dat$ngroups) {
+      SRvec <- c(SRvec, getRank(dat$Ylist[[k]]))
+    }
+    S <- R <- max(SRvec)
+    
     ## S <- dat$S
     ## R <- dat$R
     
     nsamps <- niters
-    res <- list(S=dat$S, R=dat$R, ngroups=dat$ngroups)
+    res <- list(S=S, R=R, ngroups=dat$ngroups)
 
     Usamps <- array(dim=c(P, R, ngroups, nsamps))
     omegaSamps <- array(dim=c(R, ngroups, ncol=nsamps))
@@ -243,6 +259,9 @@ for(fitType in 1:3) {
     res$omegaSamps <- omegaSamps
     res$s2samps <- s2samps
 
+    res$predictions <- makePrediction(res$Usamps, res$omegaSamps,
+                                      res$s2samps, dat$SigmaList, n=100)
+
     loss <- 0
     for(k in 1:dat$ngroups) {
 
@@ -263,7 +282,7 @@ for(fitType in 1:3) {
 
   }
 
-  print(sprintf("Finished fitting %i", fitType))
+  print(sprintf("Finished fitting %i with rank = %i", fitType, R))
   save(resList, dat, lossVec, datType,
        file=sprintf("/n/airoldifs2/lab/afranks/shared_subspace/adaptive-%i-%i.RData", datType, idx))
 }
