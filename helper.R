@@ -82,17 +82,34 @@ sampleSigma2 <- function(S, U, omega, n, nu0=1, s20=1) {
 }
 
 ## Unormalized eigenvalues
-debeta_un <- function(w, a, b, c, log=FALSE) {
-    x <- (a-1)*log(w) + (b-1)*log(1-w) + c*(w-1)
+debeta_un <- function(w, a, b, cc, log=FALSE) {
+
+    log_debeta_un <- function(w, a, b, cc) {
+        (a-1)*log(w) + (b-1)*log(1-w) + cc*w
+    }
+    
+    if(a==1) {
+        if(cc > b-1)
+            maxw <- (cc-b+1)/cc
+        else
+            maxw <- .Machine$double.eps
+    } else{
+        maxw <- optimize(function(w) log_debeta_un(w, a, b, cc),
+                         interval=c(0,1), maximum=TRUE)$maximum
+    }
+
+    x <- log_debeta_un(w, a, b, cc) - log_debeta_un(maxw, a, b, cc)
+
     if(!log){
         x <- exp(x)
     }
+
     x
 }
 
 ## normalizing constant
-debeta_nc <- function(a, b, c) {
-    1/(integrate(debeta_un, 0, 1, a=a, b=b, c=c)$val)
+debeta_nc <- function(a, b, cc) {
+    1/(integrate(debeta_un, 0, 1, a=a, b=b, cc=cc)$val)
 }
 
 ## normalized
@@ -100,35 +117,39 @@ debeta <- function(w, a, b, c){
     debeta_un(w, a, b, c)*debeta_nc(a, b, c)
 }
 
-pebeta<-function(w, a, b, c) {
-    dint<- function(w, a, b, c) {
+pebeta<-function(w, a, b, cc) {
+    dint<- function(w, a, b, cc) {
         int <- 0
         if(w > 0) {
-            int <- integrate(debeta_un, 0, w, a, b, c, 
-                             rel.tol = .Machine$double.eps^0.75,
-                             subdivisions=200L)$value
+            int <- integrate(debeta_un, 0, w, a, b, cc,
+                             rel.tol=1e-16,
+                             subdivisions=200L,
+                             stop.on.error=FALSE)$value
         }
         int
     }
-    pmin(sapply(w, dint, a, b, c)/dint(1, a, b, c), 1)
+
+    nc <- dint(1, a, b, cc)
+
+    pmin(sapply(w, dint, a, b, cc)/nc, 1)
 }
 
-qebeta<-function(p, a, b, c) {
+qebeta<-function(p, a, b, cc) {
 
-    f <- function(w, p, a, b, c){ p - pebeta(w, a, b, c) }
+    f <- function(w, p, a, b, cc){ p - pebeta(w, a, b, cc) }
     w <- p*0
     for(i in 1:length(p)) {
-        w[i] <- uniroot(f, interval=c(1e-10, 1-1e-10), p[i], a, b, c)$root
+        w[i] <- uniroot(f, interval=c(1e-10, 1-1e-10), p[i], a, b, cc)$root
     }
     w
 }
 
-rebeta<-function(n, a, b, c, interval=c(0, 1), MH=1000) {
+rebeta<-function(n, a, b, cc, interval=c(0, 1), MH=1000) {
 
-    uinterval <- sort( pebeta(interval, a, b, c) )
+    uinterval <- sort( pebeta(interval, a, b, cc) )
     if(uinterval[1] < uinterval[2] ) {
         u <- runif(n,  uinterval[1],   uinterval[2])
-        w <- qebeta(u, a, b, c)
+        w <- qebeta(u, a, b, cc)
     }
     if(uinterval[1] == uinterval[2] ) {
         w<-runif(n, interval[1], interval[2])
@@ -140,8 +161,8 @@ rebeta<-function(n, a, b, c, interval=c(0, 1), MH=1000) {
     for(s in seq(1, MH, length=MH)) {
         wp <- pmin(1-1e-6, pmax(0+1e-6, w+runif(n, -1e-3, 1e-3) ))
 
-        lhr <- debeta_un(wp, a, b, c, log=TRUE) -
-            debeta_un(w, a, b, c, log=TRUE) -
+        lhr <- debeta_un(wp, a, b, cc, log=TRUE) -
+            debeta_un(w, a, b, cc, log=TRUE) -
             log(interval[1] < wp | wp < interval[2])
         lu <- log(runif(n))
         w[lu < lhr] <- wp[lu < lhr]
@@ -150,10 +171,10 @@ rebeta<-function(n, a, b, c, interval=c(0, 1), MH=1000) {
     w
 }
 
-sampleOmega <- function(Sig, U, s2, n, a=1, b=1) {
+sampleOmega <- function(SC, U, s2, n, a=1, b=1) {
 
     R <- ncol(U)
-    cvec <- diag( t(U) %*% Sig %*% U/(2*s2) )
+    cvec <- diag( t(U) %*% SC %*% U/(2*s2) )
     omega <- numeric(R)
 
     for(r in 1:R) {
@@ -228,6 +249,23 @@ sampleV <- function(Slist, Ulist, s2vec, OmegaList, V, method="gibbs") {
                                 (2*s2vec[k])) %*% t(Ok)
     }
 
+    if(K < 1) {
+
+        A <- Slist[[K]]
+        B <- Ok  %*% (diag(omegaK, nrow=length(omegaK))/(2*s2vec[k])) %*% t(Ok)
+
+        ord <- order(omegaK, decreasing=TRUE)
+        revOrd <- order(ord)
+
+        Btilde <- B[ord, ord]
+        Vtilde <- V[, ord]
+
+        V <- rbing.matrix.gibbs(A, Btilde, Vtilde)
+
+        V <- V[, revOrd]
+
+    } else {
+    
     ## Randomly sample a column,  i
     for( i in sample(1:S) ) {
 
@@ -256,11 +294,11 @@ sampleV <- function(Slist, Ulist, s2vec, OmegaList, V, method="gibbs") {
         }
         A <- Ak_bii
         
-        Ctilde <- as.vector(C%*%N)
-        Atilde <- t(N)%*%A%*%N
+        Ctilde <- as.vector(C %*% N)
+        Atilde <- t(N) %*% A %*% N
 
-        NV <- as.vector(t(N)%*%V[, i])
-      
+        NV <- as.vector(t(N) %*% V[, i])
+        
         if( method == "gibbs" ) {
             V[, i] <- N %*% R.rbmf.vector.gibbs(Atilde, Ctilde, NV)
         } else if( method == "hmc" ) {
@@ -268,7 +306,7 @@ sampleV <- function(Slist, Ulist, s2vec, OmegaList, V, method="gibbs") {
         } else {
             stop("Unknown method")
         }
-    }
+    }}
 
     V
 }
@@ -326,7 +364,7 @@ proposeBinaryO <- function(S, U, V, Sig, s2, omega, n, flipProb=0.1) {
 
 R.rbmf.vector.gibbs <- function (A, c, x) {
 
-    evdA <- eigen(A)
+    evdA <- eigen(A, symmetric=TRUE)
     E <- evdA$vec
     l <- evdA$val
     y <- t(E) %*% x
@@ -353,10 +391,9 @@ R.rbmf.vector.hmc <- function (A, c, x, iter=10) {
     sink()
   
     samps <- extract(results, permuted=FALSE)
-
-    ## Use the last sample
-    y <- samps[nrow(samps), ]
-
+    samps <- samps[dim(samps)[1], 1, ]
+    y <- samps[grep("Y", names(samps))]
+    
     x <- E %*% y
     x/sqrt(sum(x^2))
 
@@ -379,18 +416,20 @@ R.ry_bmf <- function(y, l, d, n) {
         }
 
         theta <- R.rtheta_bmf.mh(k, a, b, abs(d[i]))
+        
         for(j in 1:n){
             y[j] <- y[j]*sqrt(1-theta)*smyi
         }
         y[i] <- sqrt(theta)*(-1^(rbinom(1,1,1/(1+exp(2*sqrt(theta)*d[i]) ))) )
     }
     y
+    ##rstiefel::ry_bmf(y, l, d)
 }
 
 
-R.rtheta_bmf.mh <- function(k, a, b, c, steps=50) {
+R.rtheta_bmf.mh <- function(k, a, b, cc, steps=50) {
 
-    w <- c
+    w <- cc
     u <- Inf
     g <- k
 
@@ -398,27 +437,35 @@ R.rtheta_bmf.mh <- function(k, a, b, c, steps=50) {
         g <- max(1/(1+log(2+a)),k-a)
     }
     count <- 1
-    
-    f <- function(x) { 1/2*log(x)+k*log(1-x)+a*x+b*sqrt(1-x)+sqrt(x)*c+log(1.0+exp(-2*sqrt(x)*c)) }
-    mode <- optimize(function(x) -f(x),lower=0,upper=1, tol=.Machine$double.eps)$minimum
 
-    fprime <- function(x) {
-        a - b/(2*sqrt(1-x)) - k/(1-x) + 1/(2*x) + c/(2*sqrt(x))
+    f <- function(x, a, b, cc, k) {
+        1/2*log(x) + k*log(1-x) + a*x+b*sqrt(1-x) + sqrt(x)*cc +
+            log(1.0 + exp(-2*sqrt(x)*cc))
     }
+
+    mode <- optimize(function(x) -f(x, a, b, cc, k),
+                     lower=0, upper=1,
+                     tol=.Machine$double.eps)$minimum
+
+    ## fprime <- function(x) {
+    ##     a - b/(2*sqrt(1-x)) - k/(1-x) + 1/(2*x) + cc/(2*sqrt(x))
+    ## }
     
-    fdoubleprime <- function(x) {
-        -b/(4*(1-x)^(3/2)) + c^2/(x*(exp(c*sqrt(x))+1)) - k/(1-x)^2 - 1/(2*x^2) - c*tanh(c*sqrt(x))/(4*x^(3/2) )
+    fdoubleprime <- function(x, a, b, cc, k) {
+        -b/(4*(1-x)^(3/2)) + cc^2/(x*(exp(cc*sqrt(x))+1)) - k/(1-x)^2 - 1/(2*x^2) - cc*tanh(cc*sqrt(x))/(4*x^(3/2) )
         
     }
 
-    dd <- fdoubleprime(mode)
+    dd <- fdoubleprime(mode, a, b, cc, k)
     if( dd >= 0 ) {
+        print("DD > 0")
         p <- 1/2
         q <- 1/(2*mode)-1/2
     } else {
         pplusq <- -1*mode*(1-mode)*dd-1
-        p <- mode*pplusq
+        p <- mode*(pplusq-2)+1
         if( p < 1 ) {
+            print("P < 1")
             p <- 1
             q <- (1-mode)/mode
         } else {
@@ -426,16 +473,19 @@ R.rtheta_bmf.mh <- function(k, a, b, c, steps=50) {
         }
     }
 
-    lprop <- function(x) { dbeta(x,p,q, log=TRUE) }
+    lprop <- function(x) { dbeta(x, p, q, log=TRUE) }
     thCur <- mode
     reject <- 0
-    for(k in 1:steps ) {
+    for(i in 1:steps) {
 
         u <- runif(1,0,1)
-        th <- ifelse(runif(1,0,1)<1/2,rbeta(1,1/2,g),rbeta(1,p,q))
+
+        ## th <- ifelse(runif(1,0,1) < 1/2, rbeta(1,1/2,g), rbeta(1,p,q))
         th <- rbeta(1,p,q)
 
-        log.mh <- f(th)-f(thCur)+lprop(thCur)-lprop(th)
+        log.mh <- f(th, a, b, cc, k) - f(thCur, a, b, cc, k) +
+            lprop(thCur) - lprop(th)
+        
         if( log.mh > 0 ) {
             thCur <- th
         } else {
@@ -446,15 +496,25 @@ R.rtheta_bmf.mh <- function(k, a, b, c, steps=50) {
                 reject <- reject+1
             }
         }
-        
     }
-
+    
+    ## if(mode > 0.05 & mode < 0.95) {
+    ##     print(sprintf("Mode = %f, samp = %f", mode, thCur))
+    ##     print(sprintf("%f, %f, %f, %f", a, b, cc, k))
+    ##     curve(f(x, a, b, cc, k), from=0.7, to=0.9)
+    ##     curve(lprop(x)-(lprop(mode)-f(mode, a, b, cc, k)),
+    ##           col="red", add=TRUE)
+    ##     browser()
+    ##     browser()
+    ## }
+    
     if( reject==steps ) {
-        
+
+        dn <- function(x) dnorm(x, mode, sd=sqrt(-1/dd), log=TRUE)
         browser()
         print(mode)
-        curve(f(x))
-        curve(lprop(x)-optimize(function(x) lprop(x)-f(x),interval=c(0,1))$objective,col="red",add=TRUE)
+        curve(f(x, a, b, cc, k), from=0.5, to=0.9)
+        curve(lprop(x)-(lprop(mode)-f(mode)), col="red", add=TRUE)
         
     }
 
@@ -496,7 +556,10 @@ makePrediction <- function(Usamps, omegaSamps, s2samps, SigmaTrueList,
                            genGroups=(1:ngroups), n=20,
                            nsamps=dim(Usamps)[4],
                            numToAvg=nsamps/2) {
-
+    if(ngroups==1) {
+        return(matrix(1, ncol=1, nrow=1))
+    }
+    
   predictionMat <- matrix(0, nrow=length(genGroups), ncol=ngroups)
   for(group in 1:length(genGroups)) {
     Yk <- rmvnorm(n, sigma=SigmaTrueList[[genGroups[group]]])
@@ -567,3 +630,78 @@ getRank <- function(Y) {
 
   rank
 }
+
+## testFunction <- function(){
+
+##     load("Vtest.Rdata")
+
+##     SC <- SC.tst
+##     U <- U.tst
+##     s2 <- s2.tst
+##     V <- V.tst
+##     O <- t(V) %*% U
+##     omega <- omega.tst
+    
+##     A <- SC
+##     B <- O  %*% (diag(omega, nrow=length(omega))/(2*s2)) %*% t(O)
+
+##     ord <- order(omega, decreasing=TRUE)
+##     revOrd <- order(ord)
+    
+##     Btilde <- B[ord, ord]
+##     Vtilde <- V[, ord]
+    
+## #    V <- rbing.matrix.gibbs(A, Btilde, Vtilde)
+## #    V <- V[, revOrd]
+
+##     tr(A %*% V  %*% B %*% t(V))
+
+##     val <- 0
+##     for( i in 1:S) {
+##         for( j in 1:S) {
+##             val <- val + t(V[, j, drop=FALSE]) %*% (B[i, j]*A) %*% V[, i]
+##         }
+##     }
+    
+##     ## Randomly sample a column,  i
+##     for( i in sample(1:S) ) {
+
+##       ## N <- NullC(V[, -i])
+
+##         ## Get the linear term
+##         ## for j neq i
+##         C <- rep(0, P)
+##         for( j in setdiff(1:S, i)) {
+##             Ak_bij <- matrix(0, P, P)
+##             for(k in 1:K) {
+##                 Ak <- Slist[[k]]
+##                 bk_ij <- BkList[[k]][i, j]
+##                 Ak_bij <- Ak_bij + Ak*bk_ij
+##             }
+##             C <- C+t(V[, j]) %*% Ak_bij
+##         }
+##         C <- 2*C
+
+##         ## Get the quadratic term
+##         Ak_bii <- matrix(0, P, P)
+##             Ak <- SC
+##             bk_ii <- B[i, i]
+##             Ak_bii <- Ak_bii+Ak*bk_ii
+##         A <- Ak_bii
+        
+##         Ctilde <- as.vector(C %*% N)
+##         Atilde <- t(N) %*% A %*% N
+
+##         NV <- as.vector(t(N) %*% V[, i])
+        
+##         if( method == "gibbs" ) {
+##             V[, i] <- N %*% R.rbmf.vector.gibbs(Atilde, Ctilde, NV)
+##         } else if( method == "hmc" ) {
+##             V[, i] <- N %*% R.rbmf.vector.hmc(Atilde, Ctilde, NV)
+##         } else {
+##             stop("Unknown method")
+##         }
+##     }}
+    
+    
+## }
