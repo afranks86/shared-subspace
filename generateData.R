@@ -130,23 +130,23 @@ if( FALSE ) {
     abline(v=norm(t(O.init)%*%(t(V)%*%Ulist[[k]]),type="F"),lwd=3,col="red")
 
     ## Sample V's succeeds...
-    Vinit <- V
+    Vinit <- rustiefel(P, S)
     Vcur <- Vinit
-    dp <- numeric(10)
-    for(i in 1:10) {
+    dp <- numeric(100)
+    for(i in 1:100) {
         print(sprintf("---- Iteration %i------",i))
-        Vcur <- sampleV(Slist, Ulist,s2vec, OmegaList, Vcur, method="gibbs")
-        dp[i] <- norm(t(Vcur)%*%V,type="F")
+        Vcur <- sampleV(dat$Slist, dat$Ulist, dat$s2vec, dat$OmegaList, Vcur, method="gibbs")
+        dp[i] <- norm(t(Vcur)%*%dat$V,type="F")
     }
-    plot(c(norm(t(Vinit)%*%V,type="F"),dp[1:10]),type="l",ylim=c(0,4.5))
+    plot(c(norm(t(Vinit) %*% dat$V,type="F"),dp[1:100]),type="l",ylim=c(0,4.5))
     Vcur <- Vinit
-    dp <- numeric(10)
-    for(i in 1:10) {
+    dp <- numeric(100)
+    for(i in 1:100) {
         print(sprintf("---- Iteration %i------",i))
-        Vcur <- sampleV(Slist, Ulist,s2vec, OmegaList, Vcur, method="hmc")
-        dp[i] <- norm(t(Vcur)%*%V,type="F")
+        Vcur <- sampleV(dat$Slist, dat$Ulist, dat$s2vec, dat$OmegaList, Vcur, method="hmc")
+        dp[i] <- norm(t(Vcur) %*% dat$V,type="F")
     }
-    lines(c(norm(t(Vinit)%*%V,type="F"),dp[1:10]),type="l",col="blue")
+    lines(c(norm(t(Vinit) %*% V,type="F"), dp[1:100]), type="l",col="blue")
 
     Vinit <- matrix(0,nrow=nrow(V),ncol=ncol(V))
     Vinit[1:ncol(V),1:ncol(V)] <- diag(ncol(V))
