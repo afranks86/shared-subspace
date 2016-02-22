@@ -1,5 +1,4 @@
 rm(list=ls())
-
 ## Need these for Rscript
 library("methods")
 library("utils")
@@ -12,18 +11,17 @@ source("helper.R")
 
 datType <- 3
 
-
 ########################################################
 ############# Data Generation #########################
 ########################################################
 
-n <- 20
+n <- 50
 S <- 2
 R <- 2
 P <- 20
 ngroups <- 5
 
-evals <- c(250, 20)
+evals <- c(250, 250)
 
 niters <- 100
 nwarmup <- niters/2
@@ -60,18 +58,19 @@ if(datType==1) {
 } else if (datType==3) {
 
   ## No pooling: Psi_k = Psi_k
+  S <- P
   Olist <- LambdaList <- list()
   for( k in 1:ngroups) {
     Olist[[k]] <- rustiefel(P, R)
     lamk <- evals 
     LambdaList[[k]] <- lamk
   }
+
   dat <- generateData(P=P, S=S, R=R, V=diag(P), Olist=Olist,
                       ngroups=ngroups, nvec=rep(n, ngroups),
                       LambdaList=LambdaList)
   
 }
-
 
 Ypooled <- c()
 for(i in 1:length(dat$Ylist)){
@@ -93,33 +92,37 @@ for(fitType in 1:3) {
   if(fitType == 1) {
     ## Initialize sampler
 
-    P <- dat$P
-    S <- R <- getRank(dat$Ypooled)
+    fitP <- dat$P
+    fitS <- fitR <- getRank(dat$Ypooled)
     ## S <- dat$S
     ## R <- dat$R
     ngroups <- dat$ngroups
     nvec <- dat$nvec
     Slist <- dat$Slist
 
-    Vinit <- matrix(0,nrow=P,ncol=S)
-    Vinit[(P-S+1):P, 1:S] <- diag(S)
-
+    ##Vinit <- matrix(0,nrow=P,ncol=S)
+    ##Vinit[(P-S+1):P, 1:S] <- diag(S)
+    Vinit <- rustiefel(P, S)
+    Vinit <- dat$V %*% dat$Olist[[1]]
     OmegaList <- Ulist <- list()
     for(k in 1:ngroups) {
-      OmegaList[[k]] <- rep(1/2, R)
+      OmegaList[[k]] <- rep(0.996, R)
 
       Ok <- matrix(0, nrow=S, ncol=R)
       Ok[1:R, 1:R] <- diag(R)
+
+      Ok <- rustiefel(S, R)
+      Ok <- diag(R)
       
       Ulist[[k]] <- Vinit %*% Ok    
     }
     s2vec <- rexp(ngroups)
 
     initSS <- list(V=Vinit, Ulist=Ulist, OmegaList=OmegaList, s2vec=s2vec)
-    res <- fitSubspace(dat$P, S, R, dat$Slist,
+    res <- fitSubspace(dat$P, fitS, fitR, dat$Slist,
                        dat$nvec, dat$ngroups, init=initSS,
                        niters=niters, sigmaTruthList=dat$SigmaList,
-                       draw=c(V=TRUE), Vmode="gibbs")
+                       draw=c(V=TRUE, s2=TRUE, omega=FALSE), Vmode="gibbs")
     
     res$predictions <- makePrediction(res$Usamps, res$omegaSamps,
                                   res$s2samps, dat$SigmaList, n=100)
@@ -138,6 +141,7 @@ for(fitType in 1:3) {
       
     }
     loss <- loss/ngroups
+    print(loss)
 
     lossVec[1] <- loss
     resList[[1]] <- res
@@ -145,6 +149,7 @@ for(fitType in 1:3) {
   } else if (fitType == 2) {
 
 ####### FIT DATA USING COMPLETE POOLING ###############
+
     P <- dat$P
     S <- R <- getRank(dat$Ypooled)
     ## S <- dat$S
@@ -165,7 +170,8 @@ for(fitType in 1:3) {
 
     initCP <- list(V=Vinit, Ulist=Ulist, OmegaList=OmegaList, s2vec=s2vec)
     resk <- fitBayesianSpike(dat$P, S, R, Slist[[1]],
-                             nvec, niters=niters)
+                             nvec, niters=niters,
+                             SigmaTruth=dat$SigmaList[[1]])
 
     Usamps <- array(dim=c(dat$P, R, dat$ngroups, niters))
     omegaSamps <- array(dim=c(R, dat$ngroups, ncol=niters))
@@ -196,8 +202,9 @@ for(fitType in 1:3) {
                                dat$OmegaList[[k]], dat$s2vec[k])
       loss <- loss + steinsLoss(solve(SigmaHatInvPM), SigmaInvK)
     }
-    loss <- loss/dat$ngroups
-    
+      loss <- loss/dat$ngroups
+      print(loss)
+      
     lossVec[2] <- loss
     resList[[2]] <- res
     
@@ -212,7 +219,7 @@ for(fitType in 1:3) {
     for(k  in 1:dat$ngroups) {
       SRvec <- c(SRvec, getRank(dat$Ylist[[k]]))
     }
-    S <- R <- max(SRvec)
+    R <- max(SRvec)
     
     ## S <- dat$S
     ## R <- dat$R
@@ -228,7 +235,8 @@ for(fitType in 1:3) {
       
       resk <- fitBayesianSpike(dat$P, S, R, dat$Slist[[k]],
                                dat$nvec[k], niters=niters,
-                               SigmaTruth=dat$SigmaTruthList[[k]])
+                               SigmaTruth=dat$SigmaTruthList[[k]],
+                               ngroups=ngroups)
       
       Usamps[, , k, ] <- resk$Usamps
       omegaSamps[, k, ] <- resk$omegaSamps
@@ -257,7 +265,8 @@ for(fitType in 1:3) {
       loss <- loss + steinsLoss(solve(SigmaHatInvPM), SigmaInvK)
     }
     loss <- loss/dat$ngroups
-
+      print(loss)
+      
     lossVec[3] <- loss
     resList[[3]] <- res
 

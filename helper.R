@@ -152,11 +152,11 @@ rebeta<-function(n, a, b, cc, interval=c(0, 1), MH=1000) {
         w <- qebeta(u, a, b, cc)
     }
     if(uinterval[1] == uinterval[2] ) {
-        w<-runif(n, interval[1], interval[2])
+        w <- runif(n, interval[1], interval[2])
     }
 
-    w[w>=interval[2]]<-interval[2]-1e-6
-    w[w<=interval[1]]<-interval[1]+1e-6
+    w[w >= interval[2]] <- interval[2] - 1e-6
+    w[w <= interval[1]] <- interval[1] + 1e-6
 
     for(s in seq(1, MH, length=MH)) {
         wp <- pmin(1-1e-6, pmax(0+1e-6, w+runif(n, -1e-3, 1e-3) ))
@@ -241,18 +241,18 @@ sampleV <- function(Slist, Ulist, s2vec, OmegaList, V, method="gibbs") {
     P <- nrow(V)
 
     ## First save the Bk matrices for each k
-    BkList <- list()
+    BkList <- OkList <- list()
     for( k in 1:K ){
-         Ok <- t(V) %*% Ulist[[k]]
+         OkList[[k]] <- t(V) %*% Ulist[[k]]
          omegaK <- OmegaList[[k]]
-         BkList[[k]] <- Ok %*% (diag(omegaK, nrow=length(omegaK)) /
-                                (2*s2vec[k])) %*% t(Ok)
+         BkList[[k]] <- OkList[[1]] %*% (diag(omegaK, nrow=length(omegaK)) /
+                                (2*s2vec[k])) %*% t(OkList[[1]])
     }
 
-    if(K < 1) {
+    if(K == 1 & method=="bing") {
 
-        A <- Slist[[K]]
-        B <- Ok  %*% (diag(omegaK, nrow=length(omegaK))/(2*s2vec[k])) %*% t(Ok)
+        A <- Slist[[1]]
+        B <- OkList[[1]]  %*% (diag(omegaK, nrow=length(omegaK))/(2*s2vec[1])) %*% t(OkList[[K]])
 
         ord <- order(omegaK, decreasing=TRUE)
         revOrd <- order(ord)
@@ -308,6 +308,42 @@ sampleV <- function(Slist, Ulist, s2vec, OmegaList, V, method="gibbs") {
         }
     }}
 
+    ## Propose swaps to handle multi-modality
+    if(ncol(V) > 1) {
+
+        if(ncol(V)==2) {
+            Vswap <- V[, 2:1]
+        } else {
+            perm <- sample(2:ncol(V))
+            onePos <- sample(2:ncol(V), size=1)
+            perm <- c(perm[1:(onePos-1)], onePos, perm[onePos:length(perm)])
+            Vswap <- V[, sample(1:ncol(V))]
+        }
+        
+        logdens <- function(Vcur) {
+            sum(
+                sapply(1:length(Slist), function(k) {
+                    Ok <- OkList[[k]]
+                    omegaK <- OmegaList[[k]]
+                    B <- Ok %*% (diag(omegaK, nrow=length(omegaK)) /
+                                 (2*s2vec[k])) %*% t(Ok)
+
+                    tr(Slist[[k]] %*% Vcur %*%
+                       B %*% t(Vcur))
+                })
+            )
+        }
+
+        logMFswap <- logdens(Vswap)
+        logMFcur <- logdens(V)
+        log.mh <- logMFswap - logMFcur
+        u <- runif(1,0,1)
+        if ( log(u) < log.mh ) {
+            V <- Vswap
+            print("SWAP")
+        }
+    }
+    
     V
 }
 
@@ -427,40 +463,26 @@ R.ry_bmf <- function(y, l, d, n) {
 }
 
 
-R.rtheta_bmf.mh <- function(k, a, b, cc, steps=50) {
+R.rtheta_bmf.mh <- function(k, a, b, cc, steps=10) {
 
-    w <- cc
-    u <- Inf
-    g <- k
-
-    if(a > 0) {
-        g <- max(1/(1+log(2+a)),k-a)
-    }
-    count <- 1
-
-    f <- function(x, a, b, cc, k) {
-        1/2*log(x) + k*log(1-x) + a*x+b*sqrt(1-x) + sqrt(x)*cc +
+    f <- function(x) {
+        -1/2*log(x) + k*log(1-x) + a*x+b*sqrt(1-x) + sqrt(x)*cc +
             log(1.0 + exp(-2*sqrt(x)*cc))
     }
 
-    mode <- optimize(function(x) -f(x, a, b, cc, k),
+    mode <- optimize(function(x) - f(x),
                      lower=0, upper=1,
                      tol=.Machine$double.eps)$minimum
 
-    ## fprime <- function(x) {
-    ##     a - b/(2*sqrt(1-x)) - k/(1-x) + 1/(2*x) + cc/(2*sqrt(x))
-    ## }
-    
-    fdoubleprime <- function(x, a, b, cc, k) {
-        -b/(4*(1-x)^(3/2)) + cc^2/(x*(exp(cc*sqrt(x))+1)) - k/(1-x)^2 - 1/(2*x^2) - cc*tanh(cc*sqrt(x))/(4*x^(3/2) )
+    fdoubleprime <- function(x) {
+        -b/(4*(1-x)^(3/2)) + cc^2/(x*(exp(cc*sqrt(x))+1)) - k/(1-x)^2 + 1/(2*x^2) - cc*tanh(cc*sqrt(x))/(4*x^(3/2) )
         
     }
 
-    dd <- fdoubleprime(mode, a, b, cc, k)
+    dd <- fdoubleprime(mode)
     if( dd >= 0 ) {
-        print("DD > 0")
         p <- 1/2
-        q <- 1/(2*mode)-1/2
+        q <- 1## 1/(2*mode)-1/2
     } else {
         pplusq <- -1*mode*(1-mode)*dd-1
         p <- mode*(pplusq-2)+1
@@ -472,18 +494,19 @@ R.rtheta_bmf.mh <- function(k, a, b, cc, steps=50) {
             q <- pplusq - p
         }
     }
+    
+    if(mode < 0.1) {
+        ##browser()
+    }
 
     lprop <- function(x) { dbeta(x, p, q, log=TRUE) }
     thCur <- mode
     reject <- 0
     for(i in 1:steps) {
 
-        u <- runif(1,0,1)
+        th <- rbeta(1, p, q)
 
-        ## th <- ifelse(runif(1,0,1) < 1/2, rbeta(1,1/2,g), rbeta(1,p,q))
-        th <- rbeta(1,p,q)
-
-        log.mh <- f(th, a, b, cc, k) - f(thCur, a, b, cc, k) +
+        log.mh <- f(th) - f(thCur) +
             lprop(thCur) - lprop(th)
         
         if( log.mh > 0 ) {
@@ -497,24 +520,16 @@ R.rtheta_bmf.mh <- function(k, a, b, cc, steps=50) {
             }
         }
     }
-    
-    ## if(mode > 0.05 & mode < 0.95) {
-    ##     print(sprintf("Mode = %f, samp = %f", mode, thCur))
-    ##     print(sprintf("%f, %f, %f, %f", a, b, cc, k))
-    ##     curve(f(x, a, b, cc, k), from=0.7, to=0.9)
-    ##     curve(lprop(x)-(lprop(mode)-f(mode, a, b, cc, k)),
-    ##           col="red", add=TRUE)
-    ##     browser()
-    ##     browser()
-    ## }
-    
+
     if( reject==steps ) {
 
-        dn <- function(x) dnorm(x, mode, sd=sqrt(-1/dd), log=TRUE)
-        browser()
-        print(mode)
-        curve(f(x, a, b, cc, k), from=0.5, to=0.9)
-        curve(lprop(x)-(lprop(mode)-f(mode)), col="red", add=TRUE)
+        ## dn <- function(x) dnorm(x, mode, sd=sqrt(-1/dd), log=TRUE)
+        ## browser()
+        ## print(mode)
+        ## curve(f(x), from=0, to=0.001, ylim=c(-15, 0))
+        ## curve(lprop(x)-(lprop(mode)-f(mode)), col="red", add=TRUE)
+        ## curve(-1/2*log(x) - (-1/2*log(1e-5)-f(1e-5)), from=0, to=0.001, col="red", add=TRUE)
+        ## thCur <- mode
         
     }
 
@@ -631,77 +646,122 @@ getRank <- function(Y) {
   rank
 }
 
-## testFunction <- function(){
 
-##     load("Vtest.Rdata")
+sampleV2 <- function(Slist, Ulist, s2vec, OmegaList, V, method="gibbs") {
 
-##     SC <- SC.tst
-##     U <- U.tst
-##     s2 <- s2.tst
-##     V <- V.tst
-##     O <- t(V) %*% U
-##     omega <- omega.tst
+    K <- length(Ulist)
+    S <- ncol(V)
+    P <- nrow(V)
+
+    ## First save the Bk matrices for each k
+    BkList <- OkList <- list()
+    for( k in 1:K ){
+        OkList[[k]] <- t(V) %*% Ulist[[k]]
+         omegaK <- OmegaList[[k]]
+         BkList[[k]] <- OkList[[k]] %*% (diag(omegaK, nrow=length(omegaK)) /
+                                (2*s2vec[k])) %*% t(OkList[[k]])
+    }
     
-##     A <- SC
-##     B <- O  %*% (diag(omega, nrow=length(omega))/(2*s2)) %*% t(O)
+    ## Randomly sample a column,  i
+    for( i in sample(1:S) ) {
 
-##     ord <- order(omega, decreasing=TRUE)
-##     revOrd <- order(ord)
-    
-##     Btilde <- B[ord, ord]
-##     Vtilde <- V[, ord]
-    
-## #    V <- rbing.matrix.gibbs(A, Btilde, Vtilde)
-## #    V <- V[, revOrd]
+      N <- NullC(V[, -i])
 
-##     tr(A %*% V  %*% B %*% t(V))
+        ## Get the linear term
+        ## for j neq i
+        C <- rep(0, P)
+        for( j in setdiff(1:S, i)) {
+            Ak_bij <- matrix(0, P, P)
+            for(k in 1:K) {
+                Ak <- Slist[[k]]
+                bk_ij <- BkList[[k]][i, j]
+                Ak_bij <- Ak_bij + Ak*bk_ij
+            }
+            C <- C+t(V[, j]) %*% Ak_bij
+        }
+        C <- 2*C
 
-##     val <- 0
-##     for( i in 1:S) {
-##         for( j in 1:S) {
-##             val <- val + t(V[, j, drop=FALSE]) %*% (B[i, j]*A) %*% V[, i]
-##         }
-##     }
-    
-##     ## Randomly sample a column,  i
-##     for( i in sample(1:S) ) {
-
-##       ## N <- NullC(V[, -i])
-
-##         ## Get the linear term
-##         ## for j neq i
-##         C <- rep(0, P)
-##         for( j in setdiff(1:S, i)) {
-##             Ak_bij <- matrix(0, P, P)
-##             for(k in 1:K) {
-##                 Ak <- Slist[[k]]
-##                 bk_ij <- BkList[[k]][i, j]
-##                 Ak_bij <- Ak_bij + Ak*bk_ij
-##             }
-##             C <- C+t(V[, j]) %*% Ak_bij
-##         }
-##         C <- 2*C
-
-##         ## Get the quadratic term
-##         Ak_bii <- matrix(0, P, P)
-##             Ak <- SC
-##             bk_ii <- B[i, i]
-##             Ak_bii <- Ak_bii+Ak*bk_ii
-##         A <- Ak_bii
+        ## Get the quadratic term
+        Ak_bii <- matrix(0, P, P)
+        for(k in 1:K) {
+            Ak <- Slist[[k]]
+            bk_ii <- BkList[[k]][i, i]
+            Ak_bii <- Ak_bii+Ak*bk_ii
+        }
+        A <- Ak_bii
         
-##         Ctilde <- as.vector(C %*% N)
-##         Atilde <- t(N) %*% A %*% N
+        Ctilde <- as.vector(C %*% N)
+        Atilde <- t(N) %*% A %*% N
 
-##         NV <- as.vector(t(N) %*% V[, i])
+        NV <- as.vector(t(N) %*% V[, i])
+
+        V[, i] <- N %*% R.rbmf.vector.mises(Atilde, Ctilde, NV)
+
+    }
+
+    ## Propose swaps to handle multi-modality
+    if(ncol(V) > 1) {
+
+        if(ncol(V)==2) {
+            Vswap <- V[, 2:1]
+        } else {
+            perm <- sample(2:ncol(V))
+            onePos <- sample(2:ncol(V), size=1)
+            perm <- c(perm[1:(onePos-1)], onePos, perm[onePos:length(perm)])
+            Vswap <- V[, sample(1:ncol(V))]
+        }
         
-##         if( method == "gibbs" ) {
-##             V[, i] <- N %*% R.rbmf.vector.gibbs(Atilde, Ctilde, NV)
-##         } else if( method == "hmc" ) {
-##             V[, i] <- N %*% R.rbmf.vector.hmc(Atilde, Ctilde, NV)
-##         } else {
-##             stop("Unknown method")
-##         }
-##     }}
+        logdens <- function(Vcur) {
+            sum(
+                sapply(1:length(Slist), function(k) {
+                    Ok <- OkList[[k]]
+                    omegaK <- OmegaList[[k]]
+                    B <- Ok %*% (diag(omegaK, nrow=length(omegaK)) /
+                                 (2*s2vec[k])) %*% t(Ok)
+
+                    tr(Slist[[k]] %*% Vcur %*%
+                       B %*% t(Vcur))
+                })
+            )
+        }
+
+        logMFswap <- logdens(Vswap)
+        logMFcur <- logdens(V)
+        log.mh <- logMFswap - logMFcur
+        u <- runif(1,0,1)
+        if ( log(u) < log.mh ) {
+            V <- Vswap
+            print("SWAP")
+        }
+    }
+
     
+    V
+}
+
+R.rbmf.vector.mises <- function(Atilde, Ctilde, xinit) {
+
+    xcur <- xinit
+    reject <- 0
+    for(i in 1:50) {
+
+        xprop <- rmf.vector(kmu=xcur * 10000)
+        logMFprop <- Ctilde %*% xprop + t(xprop) %*% Atilde %*% xprop
+        logMFcur <- Ctilde %*% xcur + t(xcur) %*% Atilde %*% xcur
+        log.mh <- logMFprop - logMFcur
+
+        if( log.mh > 0 ) {
+            xcur <- xprop
+        } else {
+            u <- runif(1,0,1)
+            if ( log(u) < log.mh ) {
+                xcur <- xprop
+            } else {
+                reject <- reject+1
+            }
+        }
+    }
+
+    xcur
     
-## }
+}
