@@ -9,19 +9,19 @@ source("fit-subspace.R")
 source("generateData.R")
 source("helper.R")
 
-datType <- 3
+datType <- 1
 
 ########################################################
 ############# Data Generation #########################
 ########################################################
 
-n <- 50
-S <- 2
+n <- 20
+S <- 10
 R <- 2
 P <- 20
-ngroups <- 5
+ngroups <- 3
 
-evals <- c(250, 250)
+evals <- c(250, 20)
 
 niters <- 100
 nwarmup <- niters/2
@@ -58,7 +58,6 @@ if(datType==1) {
 } else if (datType==3) {
 
   ## No pooling: Psi_k = Psi_k
-  S <- P
   Olist <- LambdaList <- list()
   for( k in 1:ngroups) {
     Olist[[k]] <- rustiefel(P, R)
@@ -66,7 +65,7 @@ if(datType==1) {
     LambdaList[[k]] <- lamk
   }
 
-  dat <- generateData(P=P, S=S, R=R, V=diag(P), Olist=Olist,
+  dat <- generateData(P=P, S=P, R=R, V=diag(P), Olist=Olist,
                       ngroups=ngroups, nvec=rep(n, ngroups),
                       LambdaList=LambdaList)
   
@@ -102,17 +101,18 @@ for(fitType in 1:3) {
 
     ##Vinit <- matrix(0,nrow=P,ncol=S)
     ##Vinit[(P-S+1):P, 1:S] <- diag(S)
-    Vinit <- rustiefel(P, S)
-    Vinit <- dat$V %*% dat$Olist[[1]]
+    Vinit <- rustiefel(P, fitS)
+#      Vinit <- dat$V %*% dat$Olist[[1]]
+#      Vinit <- dat$V
     OmegaList <- Ulist <- list()
     for(k in 1:ngroups) {
-      OmegaList[[k]] <- rep(0.996, R)
+      OmegaList[[k]] <- rep(0.996, fitR)
 
-      Ok <- matrix(0, nrow=S, ncol=R)
-      Ok[1:R, 1:R] <- diag(R)
+      Ok <- matrix(0, nrow=fitS, ncol=fitR)
+      Ok[1:fitR, 1:fitR] <- diag(fitR)
 
-      Ok <- rustiefel(S, R)
-      Ok <- diag(R)
+      ##Ok <- rustiefel(S, R)
+      #Ok <- dat$Olist[[k]]
       
       Ulist[[k]] <- Vinit %*% Ok    
     }
@@ -122,7 +122,7 @@ for(fitType in 1:3) {
     res <- fitSubspace(dat$P, fitS, fitR, dat$Slist,
                        dat$nvec, dat$ngroups, init=initSS,
                        niters=niters, sigmaTruthList=dat$SigmaList,
-                       draw=c(V=TRUE, s2=TRUE, omega=FALSE), Vmode="gibbs")
+                       draw=c(V=FALSE, s2=TRUE, omega=TRUE, O=TRUE), Vmode="gibbs")
     
     res$predictions <- makePrediction(res$Usamps, res$omegaSamps,
                                   res$s2samps, dat$SigmaList, n=100)
@@ -233,7 +233,7 @@ for(fitType in 1:3) {
     
     for(k in 1:dat$ngroups) {
       
-      resk <- fitBayesianSpike(dat$P, S, R, dat$Slist[[k]],
+      resk <- fitBayesianSpike(dat$P, R, dat$Slist[[k]],
                                dat$nvec[k], niters=niters,
                                SigmaTruth=dat$SigmaTruthList[[k]],
                                ngroups=ngroups)

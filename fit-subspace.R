@@ -84,6 +84,7 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
         for ( k in 1:ngroups ) {
             
             Uk <- V %*% Olist[[k]]
+                
             
             ## Sample sigma^2_k
             if(draw["s2"])
@@ -165,7 +166,7 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
 }
 
 ## bayesian single group estimation
-fitBayesianSpike <- function(P, S, R, SC, n, niters=100, nskip=1,
+fitBayesianSpike <- function(P, R, SC, n, niters=100, nskip=1,
                              init=NULL, SigmaTruth=NULL,
                              verbose=TRUE, ngroups=1) {
 
@@ -244,7 +245,7 @@ fitBayesianSpike <- function(P, S, R, SC, n, niters=100, nskip=1,
 
     }
 
-    list(S=S, R=R, init=init, Usamps=Usamps, omegaSamps=omegaSamps, s2samps=s2samps)
+    list(R=R, init=init, Usamps=Usamps, omegaSamps=omegaSamps, s2samps=s2samps)
 
 }
 

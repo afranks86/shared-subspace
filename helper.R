@@ -216,7 +216,7 @@ sampleO <- function(SC, U, s2, omega, V, phi=0) {
     prior.target <- matrix(0, nrow=ncol(V), ncol=ncol(V))
     prior.target[1:ncol(U), 1:ncol(U)] <- phi*diag(ncol(U))
 
-    A <- t(V) %*% (SC/(2*s2))%*%V+prior.target
+    A <- t(V) %*% (SC/(2*s2)) %*% V + prior.target
     B <- diag(omega, nrow=length(omega))
 
     ord <- order(omega, decreasing=TRUE)
@@ -246,23 +246,26 @@ sampleV <- function(Slist, Ulist, s2vec, OmegaList, V, method="gibbs") {
          OkList[[k]] <- t(V) %*% Ulist[[k]]
          omegaK <- OmegaList[[k]]
          BkList[[k]] <- OkList[[1]] %*% (diag(omegaK, nrow=length(omegaK)) /
-                                (2*s2vec[k])) %*% t(OkList[[1]])
+                                         (2*s2vec[k])) %*% t(OkList[[1]])
     }
 
     if(K == 1 & method=="bing") {
 
         A <- Slist[[1]]
-        B <- OkList[[1]]  %*% (diag(omegaK, nrow=length(omegaK))/(2*s2vec[1])) %*% t(OkList[[K]])
+        B <- BkList[[1]]
 
-        ord <- order(omegaK, decreasing=TRUE)
+        Beigen <- eigen(B)
+        Bvals <- Beigen$values
+        Bvecs <- Beigen$vectors
+        
+        ord <- order(Bvals, decreasing=TRUE)
         revOrd <- order(ord)
 
-        Btilde <- B[ord, ord]
-        Vtilde <- V[, ord]
+        Btilde <- diag(Bvals)
+        Vtilde <- V %*% Bvecs[, ord]
 
-        V <- rbing.matrix.gibbs(A, Btilde, Vtilde)
-
-        V <- V[, revOrd]
+        Vtilde <- rbing.matrix.gibbs(A, Btilde, Vtilde)
+        V <- Vtilde %*% t(Bvecs[, ord])
 
     } else {
     
@@ -298,11 +301,13 @@ sampleV <- function(Slist, Ulist, s2vec, OmegaList, V, method="gibbs") {
         Atilde <- t(N) %*% A %*% N
 
         NV <- as.vector(t(N) %*% V[, i])
-        
+
         if( method == "gibbs" ) {
             V[, i] <- N %*% R.rbmf.vector.gibbs(Atilde, Ctilde, NV)
         } else if( method == "hmc" ) {
             V[, i] <- N %*% R.rbmf.vector.hmc(Atilde, Ctilde, NV)
+        } else if(method == "mh" ){
+            V[, i] <- N %*% R.rbmf.vector.mh(Atilde, Ctilde, NV)
         } else {
             stop("Unknown method")
         }
@@ -319,7 +324,7 @@ sampleV <- function(Slist, Ulist, s2vec, OmegaList, V, method="gibbs") {
             perm <- c(perm[1:(onePos-1)], onePos, perm[onePos:length(perm)])
             Vswap <- V[, sample(1:ncol(V))]
         }
-        
+
         logdens <- function(Vcur) {
             sum(
                 sapply(1:length(Slist), function(k) {
@@ -410,7 +415,28 @@ R.rbmf.vector.gibbs <- function (A, c, x) {
 
 }
 
-R.rbmf.vector.hmc <- function (A, c, x, iter=10) {
+R.rbmf.vector.mh <- function (A, c, x) {
+
+    evdA <- eigen(A, symmetric=TRUE)
+    E <- evdA$vec
+    l <- evdA$val
+
+    cnorm <- c/sqrt(sum(c^2))
+    c %*% cnorm
+
+    Esigned <- E*sign(cnorm)*sign(E)
+    
+    mxVec <- which.max(c(c %*% cnorm + cnorm %*% A %*% cnorm, c %*% Esigned + l))
+    if(mxVec==1) {
+        x <- cnorm
+    } else{
+        x <- Esigned[, mxVec-1]
+    }
+
+    x
+}
+
+R.rbmf.vector.hmc <- function (A, c, x, iter=1000) {
 
     evdA <- eigen(A)
   
@@ -441,7 +467,8 @@ R.ry_bmf <- function(y, l, d, n) {
 
     k <-  (n-1)/2
 
-    for(i in 1:n) { 
+    for(i in sample(1:n)) {
+
         omyi <- 1/(1-y[i]^2)
         smyi <- sqrt(omyi)
         a <- l[i]+l[i]*y[i]^2*omyi
@@ -450,8 +477,13 @@ R.ry_bmf <- function(y, l, d, n) {
             a <- a-l[j]*y[j]^2*omyi
             b <- b+y[j]*d[j]*smyi
         }
-
+##        print(y)
+##        print(i)
+##        print(l)
         theta <- R.rtheta_bmf.mh(k, a, b, abs(d[i]))
+        if(theta==1e-16) {
+
+        }
         
         for(j in 1:n){
             y[j] <- y[j]*sqrt(1-theta)*smyi
@@ -463,7 +495,7 @@ R.ry_bmf <- function(y, l, d, n) {
 }
 
 
-R.rtheta_bmf.mh <- function(k, a, b, cc, steps=10) {
+R.rtheta_bmf.mh <- function(k, a, b, cc, steps=50) {
 
     f <- function(x) {
         -1/2*log(x) + k*log(1-x) + a*x+b*sqrt(1-x) + sqrt(x)*cc +
@@ -473,6 +505,10 @@ R.rtheta_bmf.mh <- function(k, a, b, cc, steps=10) {
     mode <- optimize(function(x) - f(x),
                      lower=0, upper=1,
                      tol=.Machine$double.eps)$minimum
+
+    if(f(1e-16) > f(mode)) {
+        mode <- 1e-16
+    }
 
     fdoubleprime <- function(x) {
         -b/(4*(1-x)^(3/2)) + cc^2/(x*(exp(cc*sqrt(x))+1)) - k/(1-x)^2 + 1/(2*x^2) - cc*tanh(cc*sqrt(x))/(4*x^(3/2) )
@@ -487,6 +523,7 @@ R.rtheta_bmf.mh <- function(k, a, b, cc, steps=10) {
         pplusq <- -1*mode*(1-mode)*dd-1
         p <- mode*(pplusq-2)+1
         if( p < 1 ) {
+            browser()
             print("P < 1")
             p <- 1
             q <- (1-mode)/mode
@@ -522,14 +559,15 @@ R.rtheta_bmf.mh <- function(k, a, b, cc, steps=10) {
     }
 
     if( reject==steps ) {
-
+        print("ALL REJECTS")
         ## dn <- function(x) dnorm(x, mode, sd=sqrt(-1/dd), log=TRUE)
-        ## browser()
         ## print(mode)
-        ## curve(f(x), from=0, to=0.001, ylim=c(-15, 0))
+        ## curve(f(x), from=0, to=0.001)
         ## curve(lprop(x)-(lprop(mode)-f(mode)), col="red", add=TRUE)
+        ## lprop2 <- function(x) { dnorm(x, mean=mode, sd=sqrt(-1/dd), log=TRUE) }
+        ## curve(lprop2(x)-(lprop2(mode)-f(mode)), col="green", add=TRUE)
         ## curve(-1/2*log(x) - (-1/2*log(1e-5)-f(1e-5)), from=0, to=0.001, col="red", add=TRUE)
-        ## thCur <- mode
+        thCur <- mode
         
     }
 
@@ -764,4 +802,154 @@ R.rbmf.vector.mises <- function(Atilde, Ctilde, xinit) {
 
     xcur
     
+}
+
+getVectorBMFMode <- function(A, b, vinit) {
+
+    k <- length(vinit)
+
+    xprev <- vinit[-k]
+    xk <- sqrt(1 - sum(xprev^2))
+    xgrad <- (2*A[-k, ] %*% xprev -
+              2*A[-k, k] * xprev^2 / xk +
+              b[-k] - b[k]*xprev/xk)
+    
+    xcur <- xprev  + 1/100 * xgrad
+    while( sum((xprev - xcur)^2) > 1e-5 ){
+
+        xprev <- xcur
+        xk <- sqrt(1 - sum(xprev^2))
+        xgrad <- (2*A[-k, ] %*% xprev -
+                  2*A[-k, k] * xprev^2 / xk +
+                  b[-k] - b[k]*xprev/xk)
+        xcur <- xprev  + 1/100 * xgrad
+        
+    }
+
+        
+}
+
+optimV <- function(dat, S, Xinit=NULL, tauStart=1, rho1=0.1, rho2=0.1,
+                   verbose=FALSE) {
+
+    Slist <- dat$Slist
+    omegaList <- dat$OmegaList
+    Olist <- dat$Olist
+
+    if(is.null(Xinit)) 
+        X <- rustiefel(dat$P, S)
+    else
+        X <- Xinit
+
+
+
+    PsiList <- list()
+    for(k in 1:length(Olist)) {
+        PsiList[[k]] <- solve(t(X) %*% dat$Slist[[k]] %*% X) * dat$nvec[k]
+    }
+    
+    F <- function(X) {
+        obj <- 0
+        for(k in 1:length(PsiList)) {
+            obj <- obj -
+                sum( diag( 1/2 * t(X) %*% Slist[[k]] %*% X %*% PsiList[[k]] ))
+        }
+        obj
+    }
+    
+
+    G <- 0
+    for(k in 1:length(PsiList)) {
+        
+            G <- G - Slist[[k]] %*%  X %*%  PsiList[[k]] 
+    }
+
+    iter <- 1
+    Fprev <- Inf
+    while(sqrt((Fprev - F(X))^2) > 1e-6 ) {
+
+        Xprev <- X
+        Fprev <- F(Xprev)
+        if(verbose) {
+            print(sprintf("Iteration %i: %f", iter, Fprev))
+        }
+        
+        X <- lineSearch(dat$P, S, X, G, F, rho1, rho2, tauStart, maxIters=50)
+
+        ## PsiList <- list()
+        ## for(k in 1:length(Olist)) {
+        ##     PsiList[[k]] <- solve(t(X) %*% dat$Slist[[k]] %*% X) * dat$nvec[k]
+        ## }
+        
+        G <- 0
+        for(k in 1:length(PsiList)) {
+            G <- G - Slist[[k]] %*%  X %*%  PsiList[[k]] 
+        }
+
+        iter <- iter + 1
+    }
+
+    ## print(F(svd(do.call(cbind, dat$Ulist))$u[, 1:S]))
+    X
+}
+
+
+## optimization algorithm based on Wen 2013
+## for finding first p eigenvalues of M
+lineSearch <- function(n, p, X, G, F,rho1, rho2, tauStart, maxIters=50) {
+
+    tau <- tauStart
+    
+    A <- G %*% t(X) - X %*% t(G)
+    U <- cbind(G, X)
+    V <- cbind(X, -1*G)
+
+    ## If tau is too large condition number is too large
+    ## and matrix can't be inverted, so reduce
+    while(kappa(diag(2*p) + tau/2*t(V) %*% U) > 1e12 ) {
+         tau <- tau/2
+    }
+    H <- solve(diag(2*p) + tau/2*t(V) %*% U)
+    
+    Ytau <- X - tau * U %*% H %*% t(V) %*% X
+    FprimeY0 <- sum(diag(t(G) %*% -A %*% X))
+    B <- diag(n) - tau/2*U %*% H %*% t(V)
+    FprimeYtau <- sum(diag(t(G) %*% -B %*% A %*% (X + Ytau)/2))
+
+    ## Check Armijo-Wolfe conditions
+    iter <- 0
+    while(F(Ytau) > (F(X) + rho1*tau*FprimeY0) | FprimeYtau < rho2*FprimeY0) {
+
+        if(iter > maxIters) {
+            print("Reached max iters")
+            break
+        }
+        
+        tau <- tau/2
+        Ytau <- X - tau * U %*% solve(diag(2*p) + tau/2 * t(V) %*% U) %*% t(V) %*% X
+        FprimeY0 <- sum(diag(t(G) %*% -A %*% X))
+        B <- diag(n) - tau/2*U %*% solve(diag(2*p) + tau/2*t(V) %*% U) %*% t(V)
+        FprimeYtau <- sum(diag(t(G) %*% -B %*% A %*% (X + Ytau)/2))
+        iter <- iter + 1
+    }
+
+    Ytau 
+}
+
+subspaceEM <- function(dat, S=dat$S, rho1=0.1, rho2=0.1,
+                       maxIters=10, verbose=FALSE) {
+
+    Vstart <- optimV(dat, S, rho1=rho1, rho2=rho2, verbose=verbose)
+    convCheck <- Inf
+    iter <- 1
+    while(convCheck > 1e-6 & iter < maxIters ) {
+        Vnew <- optimV(dat, S, Xinit=Vstart, verbose=verbose)
+        convCheck <- 1 - (norm(t(Vstart) %*% Vnew, type="F")/sqrt(S))
+        Vstart <- Vnew
+        iter <- iter + 1
+        print(convCheck)
+        
+    }
+    
+    Vnew
 }

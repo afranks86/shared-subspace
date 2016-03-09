@@ -33,7 +33,7 @@ datType <- ((idx-1) %% 3) + 1
 n <- 20
 S <- 2
 R <- 2
-P <- 20
+P <- 50
 ngroups <- 5
 
 evals <- c(250, 20)
@@ -56,6 +56,7 @@ if(datType==1) {
   dat <- generateData(P=P, S=S, R=R, ngroups=ngroups,
                       LambdaList=LambdaList, nvec=rep(n, ngroups))
 
+  dat$genType <- "Shared subspace"
   
 } else if(datType==2) {
 
@@ -71,6 +72,8 @@ if(datType==1) {
 
   dat <- generateData(P=P, S=S, R=R, Olist=Olist, ngroups=ngroups,
                       LambdaList=LambdaList, nvec=rep(n, ngroups))
+
+  dat$genType <- "Complete pooling"
   
 } else if (datType==3) {
 
@@ -84,6 +87,7 @@ if(datType==1) {
   dat <- generateData(P=P, S=S, R=R, V=diag(P), Olist=Olist,
                       ngroups=ngroups, nvec=rep(n, ngroups),
                       LambdaList=LambdaList)
+  dat$genType <- "No pooling"
   
 }
 
@@ -120,9 +124,12 @@ for(fitType in 1:3) {
     nvec <- dat$nvec
     Slist <- dat$Slist
 
-    Vinit <- matrix(0,nrow=P,ncol=S)
-    Vinit[(P-S+1):P, 1:S] <- diag(S)
-
+    ##Vinit <- matrix(0,nrow=P,ncol=S)
+    ##Vinit[(P-S+1):P, 1:S] <- diag(S)
+    Vinit <- subspaceEM(dat, S=11, verbose=FALSE, rho1=0.1, rho2=0.1, maxIters=20)
+    Vinit <- svd(do.call(cbind, dat$Ulist))$u
+    Vinit <- svd(do.call(cbind, lapply(1:ngroups, function(k) svd(t(dat$Ylist[[k]]))$u[, 1:R])))$u
+      
     OmegaList <- Ulist <- list()
     for(k in 1:ngroups) {
       OmegaList[[k]] <- rep(1/2, R)
@@ -138,7 +145,7 @@ for(fitType in 1:3) {
     res <- fitSubspace(dat$P, S, R, dat$Slist,
                        dat$nvec, dat$ngroups, init=initSS,
                        niters=niters, sigmaTruthList=dat$SigmaList,
-                       draw=c(V=TRUE), Vmode="gibbs")
+                       draw=c(V=FALSE))
     
     res$predictions <- makePrediction(res$Usamps, res$omegaSamps,
                                   res$s2samps, dat$SigmaList, n=100)
@@ -164,6 +171,7 @@ for(fitType in 1:3) {
   } else if (fitType == 2) {
 
 ####### FIT DATA USING COMPLETE POOLING ###############
+
     P <- dat$P
     S <- R <- getRank(dat$Ypooled)
     ## S <- dat$S
@@ -183,7 +191,7 @@ for(fitType in 1:3) {
     s2vec <- rexp(1)
 
     initCP <- list(V=Vinit, Ulist=Ulist, OmegaList=OmegaList, s2vec=s2vec)
-    resk <- fitBayesianSpike(dat$P, S, R, Slist[[1]],
+    resk <- fitBayesianSpike(dat$P, R, Slist[[1]],
                              nvec, niters=niters)
 
     Usamps <- array(dim=c(dat$P, R, dat$ngroups, niters))
@@ -235,7 +243,7 @@ for(fitType in 1:3) {
     
     ## S <- dat$S
     ## R <- dat$R
-    
+      
     nsamps <- niters
     res <- list(S=S, R=R, ngroups=dat$ngroups)
 
@@ -245,7 +253,7 @@ for(fitType in 1:3) {
     
     for(k in 1:dat$ngroups) {
       
-      resk <- fitBayesianSpike(dat$P, S, R, dat$Slist[[k]],
+      resk <- fitBayesianSpike(dat$P, R, dat$Slist[[k]],
                                dat$nvec[k], niters=niters,
                                SigmaTruth=dat$SigmaTruthList[[k]])
       
