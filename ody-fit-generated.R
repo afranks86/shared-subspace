@@ -126,9 +126,9 @@ for(fitType in 1:3) {
 
     ##Vinit <- matrix(0,nrow=P,ncol=S)
     ##Vinit[(P-S+1):P, 1:S] <- diag(S)
-    Vinit <- subspaceEM(dat, S=11, verbose=FALSE, rho1=0.1, rho2=0.1, maxIters=20)
-    Vinit <- svd(do.call(cbind, dat$Ulist))$u
-    Vinit <- svd(do.call(cbind, lapply(1:ngroups, function(k) svd(t(dat$Ylist[[k]]))$u[, 1:R])))$u
+    Vinit <- subspaceEM(dat, S=S, verbose=FALSE, rho1=0.1, rho2=0.1, maxIters=20)
+    ## Vinit <- svd(do.call(cbind, dat$Ulist))$u
+    ## Vinit <- svd(do.call(cbind, lapply(1:ngroups, function(k) svd(t(dat$Ylist[[k]]))$u[, 1:R])))$u
       
     OmegaList <- Ulist <- list()
     for(k in 1:ngroups) {
@@ -181,8 +181,10 @@ for(fitType in 1:3) {
     Slist[[1]] <- t(Ypooled) %*% Ypooled
     OmegaList[[1]] <- rep(1/2, S)
     
-    Vinit <- matrix(0,nrow=P,ncol=S)
-    Vinit[1:S, 1:S] <- diag(S)
+    ## Vinit <- matrix(0,nrow=P,ncol=S)
+    ## Vinit[1:S, 1:S] <- diag(S)
+    Vinit <- subspaceEM(dat, S=S, verbose=FALSE, rho1=0.1, rho2=0.1, maxIters=20)
+      
     Oinit <- rustiefel(S, R)
     Uinit <- Vinit %*% Oinit
     
@@ -292,5 +294,5 @@ for(fitType in 1:3) {
 
   print(sprintf("Finished fitting %i with rank = %i", fitType, R))
   save(resList, dat, lossVec, datType,
-       file=sprintf("/n/airoldifs2/lab/afranks/shared_subspace/adaptive-%i-%i.RData", datType, idx))
+       file=sprintf("/n/airoldifs2/lab/afranks/shared_subspace/vmode-%i-%i.RData", datType, idx))
 }
