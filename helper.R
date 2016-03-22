@@ -829,30 +829,36 @@ getVectorBMFMode <- function(A, b, vinit) {
         
 }
 
-optimV <- function(dat, S, Xinit=NULL, tauStart=1, rho1=0.1, rho2=0.1,
+optimV <- function(dat, S, R=S, Vinit=NULL, tauStart=1, rho1=0.1, rho2=0.1,
                    verbose=FALSE) {
 
     Slist <- dat$Slist
-    omegaList <- dat$OmegaList
-    Olist <- dat$Olist
 
-    if(is.null(Xinit)) 
-        X <- rustiefel(dat$P, S)
+    if(is.null(Vinit)) 
+        V <- rustiefel(dat$P, S)
     else
-        X <- Xinit
+        V <- Vinit
 
-
-
+    ## E[ 1/sigma^2 * (psi+I)^(-1) | V]
     PsiList <- list()
-    for(k in 1:length(Olist)) {
-        PsiList[[k]] <- solve(t(X) %*% dat$Slist[[k]] %*% X) * dat$nvec[k]
+    for(k in 1:length(Slist)) {
+        PsiList[[k]] <- solve(t(V) %*% dat$Slist[[k]] %*% V) *
+            (dat$nvec[k] + R +1 ) / 2
+    }
+
+    ## E[ 1/sigma^2  | V]
+    PrecList <- list()
+    for(k in 1:length(Slist)) {
+        PrecList[[k]] <- (dat$nvec[k] * (dat$P - R) + 2) /
+            tr( (diag(dat$P) - V %*% t(V)) %*% dat$Slist[[k]])
     }
     
-    F <- function(X) {
+    F <- function(V) {
         obj <- 0
         for(k in 1:length(PsiList)) {
-            obj <- obj -
-                sum( diag( 1/2 * t(X) %*% Slist[[k]] %*% X %*% PsiList[[k]] ))
+            obj <- obj +
+                1/2 * tr(  t(V) %*% Slist[[k]] %*% V %*% PsiList[[k]] ) -
+                1/2 * PrecList[[k]] * tr( V %*% t(V) %*% Slist[[k]])
         }
         obj
     }
@@ -860,43 +866,39 @@ optimV <- function(dat, S, Xinit=NULL, tauStart=1, rho1=0.1, rho2=0.1,
 
     G <- 0
     for(k in 1:length(PsiList)) {
-        
-            G <- G - Slist[[k]] %*%  X %*%  PsiList[[k]] 
+
+        G <- G + Slist[[k]] %*%  V %*%  PsiList[[k]]  -
+            PrecList[[k]] * Slist[[k]] %*%  V
     }
 
     iter <- 1
     Fprev <- Inf
-    while(sqrt((Fprev - F(X))^2) > 1e-6 ) {
+    while(sqrt((Fprev - F(V))^2) > 1e-6 ) {
 
-        Xprev <- X
-        Fprev <- F(Xprev)
+        Vprev <- V
+        Fprev <- F(Vprev)
         if(verbose) {
             print(sprintf("Iteration %i: %f", iter, Fprev))
         }
         
-        X <- lineSearch(dat$P, S, X, G, F, rho1, rho2, tauStart, maxIters=50)
+        V <- lineSearch(dat$P, S, V, G, F, rho1, rho2, tauStart, maxIters=50)
 
-        ## PsiList <- list()
-        ## for(k in 1:length(Olist)) {
-        ##     PsiList[[k]] <- solve(t(X) %*% dat$Slist[[k]] %*% X) * dat$nvec[k]
-        ## }
-        
         G <- 0
         for(k in 1:length(PsiList)) {
-            G <- G - Slist[[k]] %*%  X %*%  PsiList[[k]] 
+            G <- G + Slist[[k]] %*%  V %*%  PsiList[[k]]  -
+                PrecList[[k]] * Slist[[k]] %*% V
         }
 
         iter <- iter + 1
     }
 
-    ## print(F(svd(do.call(cbind, dat$Ulist))$u[, 1:S]))
-    X
+    V
 }
 
 
 ## optimization algorithm based on Wen 2013
 ## for finding first p eigenvalues of M
-lineSearch <- function(n, p, X, G, F,rho1, rho2, tauStart, maxIters=50) {
+lineSearch <- function(n, p, X, G, F, rho1, rho2, tauStart, maxIters=50) {
 
     tau <- tauStart
     
@@ -936,14 +938,15 @@ lineSearch <- function(n, p, X, G, F,rho1, rho2, tauStart, maxIters=50) {
     Ytau 
 }
 
-subspaceEM <- function(dat, S=dat$S, rho1=0.1, rho2=0.1,
+subspaceEM <- function(dat, Vstart=NULL, S=dat$S, R=S, rho1=0.1, rho2=0.1,
                        maxIters=10, verbose=FALSE) {
-
-    Vstart <- optimV(dat, S, rho1=rho1, rho2=rho2, verbose=verbose)
+    if(is.null(Vstart))
+        Vstart <- optimV(dat, S=S, R=R, rho1=rho1, rho2=rho2, verbose=verbose)
+    
     convCheck <- Inf
     iter <- 1
     while(convCheck > 1e-6 & iter < maxIters ) {
-        Vnew <- optimV(dat, S, Xinit=Vstart, verbose=verbose)
+        Vnew <- optimV(dat, S=S, R=R, Vinit=Vstart, verbose=verbose)
         convCheck <- 1 - (norm(t(Vstart) %*% Vnew, type="F")/sqrt(S))
         Vstart <- Vnew
         iter <- iter + 1
