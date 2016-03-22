@@ -30,11 +30,11 @@ datType <- ((idx-1) %% 3) + 1
 ############# Data Generation #########################
 ########################################################
 
-n <- 20
+n <- 50
 S <- 2
 R <- 2
 P <- 50
-ngroups <- 5
+ngroups <- 10
 
 evals <- c(250, 20)
 ##evals <- c(250, 125, 50, 30, 30, 30, 20, 20, 20, 20)
@@ -124,11 +124,10 @@ for(fitType in 1:3) {
     nvec <- dat$nvec
     Slist <- dat$Slist
 
-    ##Vinit <- matrix(0,nrow=P,ncol=S)
-    ##Vinit[(P-S+1):P, 1:S] <- diag(S)
-    Vinit <- subspaceEM(dat, S=S, verbose=FALSE, rho1=0.1, rho2=0.1, maxIters=20)
-    ## Vinit <- svd(do.call(cbind, dat$Ulist))$u
-    ## Vinit <- svd(do.call(cbind, lapply(1:ngroups, function(k) svd(t(dat$Ylist[[k]]))$u[, 1:R])))$u
+    Vinit <- svd(do.call(cbind, lapply(1:ngroups, function(k) svd(t(dat$Ylist[[k]]))$u[, 1:R])))$u[, 1:S]
+    Vinit <- subspaceEM(dat, S=S, R=R, Vstart=Vinit, verbose=FALSE, rho1=0.5, rho2=0.5, maxIters=100)
+
+      ##cancor(svd(do.call(cbind, dat$Olist))$u, Vinit)$cor
       
     OmegaList <- Ulist <- list()
     for(k in 1:ngroups) {
@@ -181,9 +180,9 @@ for(fitType in 1:3) {
     Slist[[1]] <- t(Ypooled) %*% Ypooled
     OmegaList[[1]] <- rep(1/2, S)
     
-    ## Vinit <- matrix(0,nrow=P,ncol=S)
-    ## Vinit[1:S, 1:S] <- diag(S)
-    Vinit <- subspaceEM(dat, S=S, verbose=FALSE, rho1=0.1, rho2=0.1, maxIters=20)
+    Vinit <- svd(do.call(cbind, lapply(1:ngroups, function(k) svd(t(dat$Ylist[[k]]))$u[, 1:R])))$u[, 1:S]
+    Vinit <- subspaceEM(dat, S=S, Vstart=Vinit, verbose=FALSE, rho1=0.5, rho2=0.5, maxIters=100)
+
       
     Oinit <- rustiefel(S, R)
     Uinit <- Vinit %*% Oinit
