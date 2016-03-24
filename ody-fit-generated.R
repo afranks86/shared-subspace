@@ -3,12 +3,12 @@
 #SBATCH -n 4  #Number of cores
 #SBATCH -N 1  #Number of cores 
 #SBATCH -t 15000  #Runtime in minutes
-#SBATCH -J test_ss
+#SBATCH -J ss3
 #SBATCH -o outfiles/ssg_%a.out #Standard output
 #SBATCH -e outfiles/ssg_%a.err #Standard error
 #SBATCH -p airoldi,stats #Partition to submit to 
 #SBATCH --mem=10000  #Memory per node in MB (see also --mem-per-cpu)
-#SBATCH -a 1-99
+#SBATCH -a 1-300
 
 rm(list=ls())
 idx <- as.numeric(Sys.getenv("SLURM_ARRAY_TASK_ID"))
@@ -33,14 +33,12 @@ datType <- ((idx-1) %% 3) + 1
 n <- 50
 S <- 2
 R <- 2
-P <- 50
+P <- 200
 ngroups <- 10
 
-evals <- c(250, 20)
-##evals <- c(250, 125, 50, 30, 30, 30, 20, 20, 20, 20)
-## evals <- c(250, 125, 50, 30, 30)
+evals <- c(250, 25)
 
-niters <- 50
+niters <- 1000
 nwarmup <- niters/2
 
 ## For all models Sigma_k = s2(Psi_k + diag(P))
@@ -117,9 +115,14 @@ for(fitType in 1:3) {
     ## Initialize sampler
 
     P <- dat$P
-    S <- R <- getRank(dat$Ypooled)
-    ## S <- dat$S
-    ## R <- dat$R
+    if(datType == 3)
+      S <- 20
+    else
+      S <- getRank(dat$Ypooled)
+    R <- max(sapply(dat$Ylist, getRank))
+    if(R > S)
+      S <- R
+
     ngroups <- dat$ngroups
     nvec <- dat$nvec
     Slist <- dat$Slist
@@ -127,7 +130,7 @@ for(fitType in 1:3) {
     Vinit <- svd(do.call(cbind, lapply(1:ngroups, function(k) svd(t(dat$Ylist[[k]]))$u[, 1:R])))$u[, 1:S]
     Vinit <- subspaceEM(dat, S=S, R=R, Vstart=Vinit, verbose=FALSE, rho1=0.5, rho2=0.5, maxIters=100)
 
-      ##cancor(svd(do.call(cbind, dat$Olist))$u, Vinit)$cor
+    ##cancor(svd(do.call(cbind, dat$Olist))$u, Vinit)$cor
       
     OmegaList <- Ulist <- list()
     for(k in 1:ngroups) {
@@ -293,5 +296,5 @@ for(fitType in 1:3) {
 
   print(sprintf("Finished fitting %i with rank = %i", fitType, R))
   save(resList, dat, lossVec, datType,
-       file=sprintf("/n/airoldifs2/lab/afranks/shared_subspace/vmode-%i-%i.RData", datType, idx))
+       file=sprintf("/n/airoldifs2/lab/afranks/shared_subspace/srtest-%i-%i.RData", datType, idx))
 }
