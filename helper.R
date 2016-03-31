@@ -2,7 +2,7 @@ library(rstan)
 
 library(mvtnorm)
 
-stanstart <- stan(file="vectorBMF.stan", data=list(M=9,lam=rep(1,10), gamma=rep(1, 10)), chains=1, iter=1)
+## stanstart <- stan(file="vectorBMF.stan", data=list(M=9,lam=rep(1,10), gamma=rep(1, 10)), chains=1, iter=1)
 
 tr <- function(X) { sum(diag(X)) }
 
@@ -829,28 +829,27 @@ getVectorBMFMode <- function(A, b, vinit) {
         
 }
 
-optimV <- function(dat, S, R=S, Vinit=NULL, tauStart=1, rho1=0.1, rho2=0.1,
+optimV <- function(Slist, P, S, R=S, nvec,
+                   Vinit=NULL, tauStart=1, rho1=0.1, rho2=0.9,
                    verbose=FALSE) {
 
-    Slist <- dat$Slist
-
     if(is.null(Vinit)) 
-        V <- rustiefel(dat$P, S)
+        V <- rustiefel(P, S)
     else
         V <- Vinit
 
     ## E[ 1/sigma^2 * (psi+I)^(-1) | V]
     PsiList <- list()
     for(k in 1:length(Slist)) {
-        PsiList[[k]] <- solve(t(V) %*% dat$Slist[[k]] %*% V) *
-            (dat$nvec[k] + R +1 ) / 2
+        PsiList[[k]] <- solve(t(V) %*% Slist[[k]] %*% V) *
+            (nvec[k] + R +1 ) / 2
     }
 
     ## E[ 1/sigma^2  | V]
-    PrecList <- list()
+    PrecVec <- c()
     for(k in 1:length(Slist)) {
-        PrecList[[k]] <- (dat$nvec[k] * (dat$P - R) + 2) /
-            tr( (diag(dat$P) - V %*% t(V)) %*% dat$Slist[[k]])
+        PrecVec[k] <- (nvec[k] * (P - R) + 2) /
+            tr( (diag(P) - V %*% t(V)) %*% Slist[[k]])
     }
     
     F <- function(V) {
@@ -858,7 +857,7 @@ optimV <- function(dat, S, R=S, Vinit=NULL, tauStart=1, rho1=0.1, rho2=0.1,
         for(k in 1:length(PsiList)) {
             obj <- obj +
                 1/2 * tr(  t(V) %*% Slist[[k]] %*% V %*% PsiList[[k]] ) -
-                1/2 * PrecList[[k]] * tr( V %*% t(V) %*% Slist[[k]])
+                1/2 * PrecVec[k] * tr( V %*% t(V) %*% Slist[[k]])
         }
         obj
     }
@@ -868,38 +867,38 @@ optimV <- function(dat, S, R=S, Vinit=NULL, tauStart=1, rho1=0.1, rho2=0.1,
     for(k in 1:length(PsiList)) {
 
         G <- G + Slist[[k]] %*%  V %*%  PsiList[[k]]  -
-            PrecList[[k]] * Slist[[k]] %*%  V
+            PrecVec[k] * Slist[[k]] %*%  V
     }
 
     iter <- 1
     Fprev <- Inf
     while(sqrt((Fprev - F(V))^2) > 1e-6 ) {
-
+        
         Vprev <- V
         Fprev <- F(Vprev)
         if(verbose) {
             print(sprintf("Iteration %i: %f", iter, Fprev))
         }
         
-        V <- lineSearch(dat$P, S, V, G, F, rho1, rho2, tauStart, maxIters=50)
+        V <- lineSearch(P, S, V, G, F, rho1, rho2, tauStart)
 
         G <- 0
         for(k in 1:length(PsiList)) {
             G <- G + Slist[[k]] %*%  V %*%  PsiList[[k]]  -
-                PrecList[[k]] * Slist[[k]] %*% V
+                PrecVec[k] * Slist[[k]] %*% V
         }
 
         iter <- iter + 1
     }
 
-    V
+    list(V=V, PrecVec=PrecVec, PsiList=PsiList)
 }
 
 
 ## optimization algorithm based on Wen 2013
 ## for finding first p eigenvalues of M
 lineSearch <- function(n, p, X, G, F, rho1, rho2, tauStart, maxIters=50) {
-
+    reached <- FALSE
     tau <- tauStart
     
     A <- G %*% t(X) - X %*% t(G)
@@ -919,14 +918,35 @@ lineSearch <- function(n, p, X, G, F, rho1, rho2, tauStart, maxIters=50) {
     FprimeYtau <- sum(diag(t(G) %*% -B %*% A %*% (X + Ytau)/2))
 
     ## Check Armijo-Wolfe conditions
+    minVal <- F(X)
+    minTau <- 1e-16
     iter <- 0
     while(F(Ytau) > (F(X) + rho1*tau*FprimeY0) | FprimeYtau < rho2*FprimeY0) {
 
-        if(iter > maxIters) {
-            print("Reached max iters")
-            break
+        if(F(Ytau) < minVal) {
+            minVal <- F(Ytau)
+            minTau <- tau
         }
         
+        if(iter > maxIters) {
+            if(reached == FALSE) {
+                print("Reached max iters")
+                ## tau <- minTau
+                ## Ytau <- X - tau * U %*% solve(diag(2*p) + tau/2 * t(V) %*% U) %*% t(V) %*% X
+                break
+                ##reached <- TRUE
+                ##iter <- 0
+                ##tau <- -2 * tauStart
+                ## while(kappa(diag(2*p) + tau/2*t(V) %*% U) > 1e12 ) {
+                ##      tau <- tau/2
+                ##  }
+
+            } else {
+                print("Reached max iters")
+                break
+            }
+        }
+
         tau <- tau/2
         Ytau <- X - tau * U %*% solve(diag(2*p) + tau/2 * t(V) %*% U) %*% t(V) %*% X
         FprimeY0 <- sum(diag(t(G) %*% -A %*% X))
@@ -938,15 +958,22 @@ lineSearch <- function(n, p, X, G, F, rho1, rho2, tauStart, maxIters=50) {
     Ytau 
 }
 
-subspaceEM <- function(dat, Vstart=NULL, S=dat$S, R=S, rho1=0.1, rho2=0.1,
-                       maxIters=10, verbose=FALSE) {
+subspaceEM <- function(Slist, P, S, R=S, nvec, rho1=0.1, rho2=0.1,
+                       Vstart=NULL,
+                       maxIters=10,
+                       verbose=FALSE) {
+    
     if(is.null(Vstart))
-        Vstart <- optimV(dat, S=S, R=R, rho1=rho1, rho2=rho2, verbose=verbose)
+        Vstart <- optimV(Slist, P=P, S=S, R=R, nvec=nvec, rho1=rho1, rho2=rho2,
+                         verbose=verbose)$V
     
     convCheck <- Inf
     iter <- 1
     while(convCheck > 1e-6 & iter < maxIters ) {
-        Vnew <- optimV(dat, S=S, R=R, Vinit=Vstart, verbose=verbose)
+        optimList <- optimV(Slist=Slist, P=P, S=S, R=R, nvec,
+                            rho1=rho1, rho2=rho2, Vinit=Vstart, verbose=verbose)
+        Vnew <- optimList$V
+        print(optimList$PrecVec)
         convCheck <- 1 - (norm(t(Vstart) %*% Vnew, type="F")/sqrt(S))
         Vstart <- Vnew
         iter <- iter + 1
@@ -954,5 +981,5 @@ subspaceEM <- function(dat, Vstart=NULL, S=dat$S, R=S, rho1=0.1, rho2=0.1,
         
     }
     
-    Vnew
+    optimList
 }

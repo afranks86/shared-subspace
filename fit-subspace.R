@@ -132,17 +132,22 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
         
         
         if(i%%nskip==0 & verbose) {
-            
+
+
             sl <- 0
             if(is.null(sigmaTruthInvList)) {
+                ## Print loss relative to starting point
                 for(k in 1:ngroups) {
 
                     omegak <- OmegaList[[k]]
                     SigHat <- s2vec[k]*(Ulist[[k]] %*%
                                         diag(omegak/(1-omegak)) %*%
                                         t(Ulist[[k]])+diag(P))
-                    ## sl <- sl + steinsLoss(SigHat, )
-                    print("TODO")
+
+                    SigmaStartInvK <- with(initSS,
+                                           1/s2vec[k]*(diag(P) - Ulist[[k]] %*% diag(OmegaList[[k]]) %*% t(Ulist[[k]])))
+
+                    sl <- sl + steinsLoss(SigHat, SigmaStartInvK)
                 }
             } else {
                 for(k in 1:ngroups) {
@@ -150,7 +155,7 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
                     SigHat <- s2vec[k]*(Ulist[[k]] %*%
                                         diag(omegak/(1-omegak)) %*%
                                         t(Ulist[[k]])+diag(P))
-                    
+
                     sl <- sl + steinsLoss(SigHat, sigmaTruthInvList[[k]])
 
                 }
