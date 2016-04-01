@@ -595,6 +595,19 @@ getPostMeanSigmaInv <- function(P, USamps, OmegaSamps, s2vec, nsamps) {
     apply(simplify2array(SigmaInvList), c(1, 2), mean)
 }
 
+## posterior mean of (t(V) x Sig x V)^(-1)
+getPostMeanSigmaProjInv <- function(S, V, USamps, OmegaSamps, s2vec, nsamps) {
+    SigmaProjInvList <- lapply(1:nsamps, function(i) {
+        
+        1/s2vec[i]*(diag(S) - (t(V) %*% USamps[, , i]) %*%
+                    diag(OmegaSamps[, i]) %*%
+                    t(t(V) %*% USamps[, , i]))
+    })
+    apply(simplify2array(SigmaProjInvList), c(1, 2), mean)
+}
+
+
+
 getPostMeanSigma <- function(P, Ulist, OmegaList, s2vec) {
 
     SigmaList <- sapply(1:nsamps, function(i) {
