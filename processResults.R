@@ -1,4 +1,4 @@
- directory <- "/n/airoldifs2/lab/afranks/shared_subspace"
+directory <- "/n/airoldifs2/lab/afranks/shared_subspace"
 lossList <- allLosses <- list()
 for(i in 1:3) {
   files <- list.files(directory, pattern=sprintf("srtest-%i",i))
@@ -17,3 +17,12 @@ for(i in 1:3) {
   allLosses[[i]] <- lossMat
 }
 apply(allLosses[[3]], 2, function(x) quantile(x, c(0.1, 0.9)))
+
+directory <- "/n/airoldifs2/lab/afranks/shared_subspace"
+files <- list.files(directory, pattern="sdim")
+lossLst <- c()
+for(i in 5:50) {
+  print(i)
+  load(sprintf("%s/sdimtest-3-%i.RData", directory, i))
+  lossLst <- c(lossLst, lossVec[1])
+}

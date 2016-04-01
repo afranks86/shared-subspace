@@ -111,6 +111,7 @@ for(fitType in 1:3) {
 
 ####### FIT DATA USING SHARED SUBSPACE ###############
 
+<<<<<<< Updated upstream
     if(fitType == 1) {
         ## Initialize sampler
 
@@ -302,7 +303,8 @@ for(fitType in 1:3) {
 
     }
 
-    print(sprintf("Finished fitting %i with rank = %i", fitType, R))
-    save(resList, dat, lossVec, datType,
-         file=sprintf("/n/airoldifs2/lab/afranks/shared_subspace/srtest-%i-%i.RData", datType, idx))
+  print(sprintf("Finished fitting %i with rank = %i", fitType, R))
+  save(resList, dat, lossVec, datType,
+       file=sprintf("/n/airoldifs2/lab/afranks/shared_subspace/sequalrtest-%i-%i.RData", datType, idx))
+
 }
