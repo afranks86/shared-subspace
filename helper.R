@@ -844,7 +844,7 @@ getVectorBMFMode <- function(A, b, vinit) {
 
 optimV <- function(Slist, P, S, R=S, nvec,
                    Vinit=NULL, tauStart=1, rho1=0.1, rho2=0.9,
-                   verbose=FALSE) {
+                   maxIters=100, verbose=FALSE) {
 
     if(is.null(Vinit)) 
         V <- rustiefel(P, S)
@@ -862,7 +862,7 @@ optimV <- function(Slist, P, S, R=S, nvec,
     PrecVec <- c()
     for(k in 1:length(Slist)) {
         PrecVec[k] <- (nvec[k] * (P - R) + 2) /
-            tr( (diag(P) - V %*% t(V)) %*% Slist[[k]])
+            (tr(Slist[[k]]) - tr( t(V) %*% Slist[[k]] %*% V ))
     }
     
     F <- function(V) {
@@ -870,7 +870,7 @@ optimV <- function(Slist, P, S, R=S, nvec,
         for(k in 1:length(PsiList)) {
             obj <- obj +
                 1/2 * tr(  t(V) %*% Slist[[k]] %*% V %*% PsiList[[k]] ) -
-                1/2 * PrecVec[k] * tr( V %*% t(V) %*% Slist[[k]])
+                1/2 * PrecVec[k] * tr(t(V) %*% Slist[[k]] %*% V)
         }
         obj
     }
@@ -879,14 +879,14 @@ optimV <- function(Slist, P, S, R=S, nvec,
     G <- 0
     for(k in 1:length(PsiList)) {
 
-        G <- G + Slist[[k]] %*%  V %*%  PsiList[[k]]  -
+        G <- G + Slist[[k]] %*%  (V %*%  PsiList[[k]])  -
             PrecVec[k] * Slist[[k]] %*%  V
     }
 
     iter <- 1
     Fprev <- Inf
-    while(sqrt((Fprev - F(V))^2) > 1e-6 ) {
-        
+    while(sqrt((Fprev - F(V))^2) > 1e-6 & iter < maxIters) {
+
         Vprev <- V
         Fprev <- F(Vprev)
         if(verbose) {
@@ -897,7 +897,7 @@ optimV <- function(Slist, P, S, R=S, nvec,
 
         G <- 0
         for(k in 1:length(PsiList)) {
-            G <- G + Slist[[k]] %*%  V %*%  PsiList[[k]]  -
+            G <- G + Slist[[k]] %*%  (V %*%  PsiList[[k]])  -
                 PrecVec[k] * Slist[[k]] %*% V
         }
 
@@ -909,11 +909,10 @@ optimV <- function(Slist, P, S, R=S, nvec,
 
 
 ## optimization algorithm based on Wen 2013
-## for finding first p eigenvalues of M
 lineSearch <- function(n, p, X, G, F, rho1, rho2, tauStart, maxIters=50) {
     reached <- FALSE
     tau <- tauStart
-    
+
     A <- G %*% t(X) - X %*% t(G)
     U <- cbind(G, X)
     V <- cbind(X, -1*G)
@@ -971,7 +970,7 @@ lineSearch <- function(n, p, X, G, F, rho1, rho2, tauStart, maxIters=50) {
     Ytau 
 }
 
-subspaceEM <- function(Slist, P, S, R=S, nvec, rho1=0.1, rho2=0.1,
+subspaceEM <- function(Slist, P, S, R=S, nvec, rho1=0.1, rho2=0.9,
                        Vstart=NULL,
                        maxIters=10,
                        verbose=FALSE) {
