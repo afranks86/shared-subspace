@@ -77,7 +77,7 @@ sampleSigma2 <- function(S, U, omega, n, nu0=1, s20=1) {
 
     p <- nrow(S)
     a <- ( nu0 + n*p)/2
-    b <- ( nu0*s20 + tr(S%*%( diag(p)  - U %*% diag(omega, nrow=length(omega)) %*% t(U))) )/2
+    b <- ( nu0*s20 + tr(S - (S %*% U) %*% (diag(omega, nrow=length(omega)) %*% t(U))) )/2
     1/rgamma(1, a, b)
 }
 
@@ -607,6 +607,12 @@ getPostMeanSigmaProjInv <- function(S, V, USamps, OmegaSamps, s2vec, nsamps) {
 }
 
 
+getPostMeanPsi <- function(Osamps, OmegaSamps, s2vec, nsamps) {
+    PsiList <- lapply(1:nsamps, function(i) {
+        s2vec[i]*(Osamps[, , i] %*% diag((1-OmegaSamps[, i])/OmegaSamps[, i]) %*% t(Osamps[, , i]))
+    })
+    apply(simplify2array(PsiList), c(1, 2), mean)
+}
 
 getPostMeanSigma <- function(P, Ulist, OmegaList, s2vec) {
 
@@ -884,17 +890,20 @@ optimV <- function(Slist, P, S, R=S, nvec,
     }
 
     iter <- 1
-    Fprev <- Inf
-    while(sqrt((Fprev - F(V))^2) > 1e-6 & iter < maxIters) {
+    Fprev <- 0
+    Fcur <- F(V)
 
-        Vprev <- V
-        Fprev <- F(Vprev)
+    while(Fprev/Fcur < 1-1e-6 & iter < maxIters) {
+
         if(verbose) {
             print(sprintf("Iteration %i: %f", iter, Fprev))
         }
-        
-        V <- lineSearch(P, S, V, G, F, rho1, rho2, tauStart)
 
+        ## Update F(V)
+        Fprev <- Fcur
+        V <- lineSearch(P, S, V, G, F, rho1, rho2, tauStart)
+        Fcur <- F(V)
+        
         G <- 0
         for(k in 1:length(PsiList)) {
             G <- G + Slist[[k]] %*%  (V %*%  PsiList[[k]])  -
@@ -917,6 +926,9 @@ lineSearch <- function(n, p, X, G, F, rho1, rho2, tauStart, maxIters=50) {
     U <- cbind(G, X)
     V <- cbind(X, -1*G)
 
+    ## G X  t(X)
+    ##     -t(G)
+
     ## If tau is too large condition number is too large
     ## and matrix can't be inverted, so reduce
     while(kappa(diag(2*p) + tau/2*t(V) %*% U) > 1e12 ) {
@@ -924,7 +936,7 @@ lineSearch <- function(n, p, X, G, F, rho1, rho2, tauStart, maxIters=50) {
     }
     H <- solve(diag(2*p) + tau/2*t(V) %*% U)
     
-    Ytau <- X - tau * U %*% H %*% t(V) %*% X
+    Ytau <- X - tau * U %*% (H %*% t(V) %*% X)
     FprimeY0 <- sum(diag(t(G) %*% -A %*% X))
     B <- diag(n) - tau/2*U %*% H %*% t(V)
     FprimeYtau <- sum(diag(t(G) %*% -B %*% A %*% (X + Ytau)/2))
@@ -933,6 +945,7 @@ lineSearch <- function(n, p, X, G, F, rho1, rho2, tauStart, maxIters=50) {
     minVal <- F(X)
     minTau <- 1e-16
     iter <- 0
+
     while(F(Ytau) > (F(X) + rho1*tau*FprimeY0) | FprimeYtau < rho2*FprimeY0) {
 
         if(F(Ytau) < minVal) {
@@ -941,26 +954,13 @@ lineSearch <- function(n, p, X, G, F, rho1, rho2, tauStart, maxIters=50) {
         }
         
         if(iter > maxIters) {
-            if(reached == FALSE) {
-                print("Reached max iters")
-                ## tau <- minTau
-                ## Ytau <- X - tau * U %*% solve(diag(2*p) + tau/2 * t(V) %*% U) %*% t(V) %*% X
-                break
-                ##reached <- TRUE
-                ##iter <- 0
-                ##tau <- -2 * tauStart
-                ## while(kappa(diag(2*p) + tau/2*t(V) %*% U) > 1e12 ) {
-                ##      tau <- tau/2
-                ##  }
-
-            } else {
                 print("Reached max iters")
                 break
-            }
         }
 
         tau <- tau/2
-        Ytau <- X - tau * U %*% solve(diag(2*p) + tau/2 * t(V) %*% U) %*% t(V) %*% X
+
+        Ytau <- X - tau * U %*% (solve(diag(2*p) + tau/2 * t(V) %*% U) %*% t(V) %*% X)
         FprimeY0 <- sum(diag(t(G) %*% -A %*% X))
         B <- diag(n) - tau/2*U %*% solve(diag(2*p) + tau/2*t(V) %*% U) %*% t(V)
         FprimeYtau <- sum(diag(t(G) %*% -B %*% A %*% (X + Ytau)/2))
@@ -994,4 +994,31 @@ subspaceEM <- function(Slist, P, S, R=S, nvec, rho1=0.1, rho2=0.9,
     }
     
     optimList
+}
+
+
+## for finding first p eigenvalues of M
+sumFirstP <- function(M, n, p, rho1=0.1, rho2=0.9) {
+    
+    F <- function(X) { - sum(diag(t(X) %*% M %*% X)) }
+
+    X <- rbind(diag(p), matrix(0, nrow=n-p, p))
+    G <- -2*M %*% X
+
+    Fprev <- 0
+    while(Fprev/F(X) < 1-1e-6 ) {
+
+        Xprev <- X
+        Fprev <- F(Xprev)
+        
+        tau <- 1
+        X <- lineSearch(n, p, X, G, F, rho1, rho2, tau)
+
+        G <- -2*M %*% X
+
+        print(sprintf("Objective is %f", F(X)))
+    
+    }
+
+    X
 }

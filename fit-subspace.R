@@ -4,6 +4,7 @@
 fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
                         niters=100, nskip=1, init=NULL, binaryO=FALSE,
                         verbose=TRUE, sigmaTruthList=NULL, draw=c(),
+                        printLoss=FALSE,
                         Vmode="hmc") {
     
 
@@ -28,7 +29,7 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
 
 
         SigInvInitList <- list()
-        s2vec <- rexp(ngroups)  
+        s2vec <- rexp(ngroups)
         for(k in 1:ngroups) {
             OmegaList[[k]] <- rep(1/2, R)
 
@@ -80,7 +81,7 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
         if(draw["V"])
             V <- sampleV(Slist, Ulist, s2vec, OmegaList,
                          V, method=Vmode)
-
+        
         for ( k in 1:ngroups ) {
             
             Uk <- V %*% Olist[[k]]
@@ -127,13 +128,14 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
             
         }
 
-        if (i%%nskip==0)
-            Vsamps[, , i/nskip] <- V    
+        if (i%%nskip==0) {
+            Vsamps[, , i/nskip] <- V
+            if(verbose & !printLoss)
+                print(sprintf("Iteration %i", i))
+        }
         
-        
-        if(i%%nskip==0 & verbose) {
-
-
+        if(i%%nskip==0 & verbose & printLoss) {
+            
             sl <- 0
             if(is.null(sigmaTruthInvList)) {
                 ## Print loss relative to starting point
@@ -160,9 +162,7 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
 
                 }
             }
-            
             print(sprintf("Iteration %i, Loss %f", i, sl/ngroups))
-            
         }
     }
 
