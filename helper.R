@@ -89,7 +89,7 @@ vectorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups) {
         PointsList <- lapply(1:nsamps, function(i) {
             LambdaSamp <- OmegaSamps[, g, i]/(1-OmegaSamps[, g, i])
             maxIndex <- which.max(LambdaSamp)
-            s2samps[g, i]*(Osamps[, 2, g, i] * max(OmegaSamps[, g, i]/(1-OmegaSamps[, g, i]))) })
+            s2samps[g, i]*(Osamps[, maxIndex, g, i] * LambdaSamp[maxIndex]) })
         pts <- simplify2array(PointsList)
         
         pts <- pts*rbind(sign(pts[1, ]), sign(pts[1, ]))
