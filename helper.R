@@ -68,11 +68,53 @@ getAgeStat <- function(normsMat) {
 
 }
 
+vectorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups) {
+
+    plot(0, 0, xlim=c(-2*abs(max(pmValues)), 2*abs(max(pmValues))),
+         ylim=c(-2*abs(max(pmValues)), 2*abs(max(pmValues))), cex=0)
+    abline(h=0, lty=2)
+    abline(v=0, lty=2)
+    
+    for(g in groups) {
+        pmPsi <- getPostMeanPsi(Osamps[, ,g , ], OmegaSamps[, g, ], s2samps[g, ],
+                                nsamps)
+        eigPsi <- eigen(pmPsi)
+        pmValues <- eigPsi$values
+        pmVectors <- eigPsi$vectors
+        maxIndex <- which.max(pmValues)
+        pmPoint <- pmValues[maxIndex]*pmVectors[, maxIndex]
+        if(pmPoint[1] < 0)
+            pmPoint <- pmPoint * c(-1, -1)
+
+        PointsList <- lapply(1:nsamps, function(i) {
+            LambdaSamp <- OmegaSamps[, g, i]/(1-OmegaSamps[, g, i])
+            maxIndex <- which.max(LambdaSamp)
+            s2samps[g, i]*(Osamps[, 2, g, i] * max(OmegaSamps[, g, i]/(1-OmegaSamps[, g, i]))) })
+        pts <- simplify2array(PointsList)
+        
+        pts <- pts*rbind(sign(pts[1, ]), sign(pts[1, ]))
+
+        angles <- atan(pts[2,]/pts[1,])
+        qtls <- quantile(angles, c(0.025, 0.975))
+        indices <- which(angles >= qtls[1] & angles <= qtls[2])
+
+        pts <- pts[, indices]
+        
+        hullPoints <- chull(pts[1, ], pts[2, ])
+        polygon(pts[1, hullPoints], pts[2, hullPoints], col=alpha(g, 1/2))
+
+        points(pmPoint[1], pmPoint[2], pch=19, cex=1, col=g)
+
+    }
+}
+
+
 ##############################################################
 ### Functions for Sampling
 #############################################################
 
 ## Sample from 1/sigma^2
+
 sampleSigma2 <- function(S, U, omega, n, nu0=1, s20=1) {
 
     p <- nrow(S)
@@ -609,7 +651,7 @@ getPostMeanSigmaProjInv <- function(S, V, USamps, OmegaSamps, s2vec, nsamps) {
 
 getPostMeanPsi <- function(Osamps, OmegaSamps, s2vec, nsamps) {
     PsiList <- lapply(1:nsamps, function(i) {
-        s2vec[i]*(Osamps[, , i] %*% diag((1-OmegaSamps[, i])/OmegaSamps[, i]) %*% t(Osamps[, , i]))
+        s2vec[i]*(Osamps[, , i] %*% diag(OmegaSamps[, i]/(1-OmegaSamps[, i])) %*% t(Osamps[, , i]))
     })
     apply(simplify2array(PsiList), c(1, 2), mean)
 }
@@ -850,7 +892,7 @@ getVectorBMFMode <- function(A, b, vinit) {
 
 optimV <- function(Slist, P, S, R=S, nvec,
                    Vinit=NULL, tauStart=1, rho1=0.1, rho2=0.9,
-                   maxIters=100, verbose=FALSE) {
+                   maxIters=50, verbose=FALSE) {
 
     if(is.null(Vinit)) 
         V <- rustiefel(P, S)
@@ -861,7 +903,7 @@ optimV <- function(Slist, P, S, R=S, nvec,
     PsiList <- list()
     for(k in 1:length(Slist)) {
         PsiList[[k]] <- solve(t(V) %*% Slist[[k]] %*% V) *
-            (nvec[k] + R +1 ) / 2
+            (nvec[k] + R +1 )
     }
 
     ## E[ 1/sigma^2  | V]
@@ -998,7 +1040,7 @@ subspaceEM <- function(Slist, P, S, R=S, nvec, rho1=0.1, rho2=0.9,
 
 
 ## for finding first p eigenvalues of M
-sumFirstP <- function(M, n, p, rho1=0.1, rho2=0.9) {
+sumFirstP <- function(M, n, p, rho1=0.1, rho2=0.9, tol=1-1e-6) {
     
     F <- function(X) { - sum(diag(t(X) %*% M %*% X)) }
 
@@ -1006,7 +1048,7 @@ sumFirstP <- function(M, n, p, rho1=0.1, rho2=0.9) {
     G <- -2*M %*% X
 
     Fprev <- 0
-    while(Fprev/F(X) < 1-1e-6 ) {
+    while(Fprev/F(X) < tol ) {
 
         Xprev <- X
         Fprev <- F(Xprev)
