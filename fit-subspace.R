@@ -12,21 +12,26 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
     nskip <- nskip
     nsamps <- floor(niters/nskip)
 
-    Usamps <- array(dim=c(P, R, ngroups, nsamps))
-    Osamps <- array(dim=c(S, R, ngroups, nsamps))
+    Usamps <- array(dim=c(P, S, ngroups, nsamps))
+    Osamps <- array(dim=c(S, S, ngroups, nsamps))
     Vsamps <- array(dim=c(P, S, nsamps))
-    omegaSamps <- array(dim=c(R, ngroups, ncol=nsamps))
+    omegaSamps <- array(dim=c(S, ngroups, ncol=nsamps))
     s2samps <- matrix(nrow=ngroups, ncol=nsamps)
 
     initItems <- c("V", "Ulist", "OmegaList")
     if( is.null(init) ) {
 
-        Vinit <- matrix(0,nrow=P, ncol=S)
-        Vinit[1:S, 1:S] <- diag(S)
 
+
+        V1 <- matrix(0,nrow=P, ncol=R)
+        V1[1:R, 1:R] <- diag(R)
+
+        V2 <- matrix(0,nrow=P, ncol=S-R)
+        V2[(R+1):S, (R+1):S] <- diag((S-R))
+
+        V <- cbind(V1, V2)
+        
         OmegaList <- Olist <- Ulist <- list()
-
-
 
         SigInvInitList <- list()
         s2vec <- rexp(ngroups)
@@ -82,6 +87,19 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
             V <- sampleV(Slist, Ulist, s2vec, OmegaList,
                          V, method=Vmode)
         
+        Ssum <- lapply(1:ngroups, function(k) Slist[[k]]/s2vec[k]) %>%
+            Reduce('+', .)
+
+        ## Sample common omega
+        Uk <- Ulist[[1]]
+        
+        Omega2 <- sampleOmega(Ssum, Uk[, (R+1):S],
+                              1, sum(nvec[k]))
+        
+        ## Sample common O
+        O2 <- sampleO(Ssum, Uk[, (R+1):S], 1, OmegaList[[k]][(R+1):S],
+                      V[, (R+1):S])
+        
         for ( k in 1:ngroups ) {
             
             Uk <- V %*% Olist[[k]]
@@ -91,26 +109,23 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
             if(draw["s2"])
                 s2vec[k] <- sampleSigma2(Slist[[k]], Uk, OmegaList[[k]], nvec[k])
 
-            if(binaryO) {
-                if(draw["O"]) {
-                    samp <- proposeBinaryO(S, Uk, V, Slist[[k]],
-                                           s2vec[k], OmegaList[[k]],
-                                           nvec[k], flipProb=0.1)
-                    Ok <- samp$O
-                }
-                if(draw["omega"])
-                    OmegaList[[k]] <- samp$omega
+            
+            ## Sample omegas_k, don't requrie ordered
+            if(draw["omega"]) {
+
+                Omega1 <- sampleOmega(Slist[[k]], Uk[, 1:R],
+                                         s2vec[k], nvec[k])
+
+                OmegaList[[k]] <- c(Omega1, Omega2)
                 
-            } else {
-                ## Sample omegas_k, don't requrie ordered
-                if(draw["omega"])
-                    OmegaList[[k]] <- sampleOmega(Slist[[k]], Uk,
-                                                  s2vec[k], nvec[k])
+            }
                 ## Sample O_k
-                if(draw["O"])
-                    Ok <- sampleO(Slist[[k]], Uk, s2vec[k],
-                                  OmegaList[[k]], V)
+            if(draw["O"]) {
                 
+                O1 <- sampleO(Slist[[k]], Uk[, 1:R], s2vec[k],
+                                  (OmegaList[[k]])[1:R], V[, 1:R])
+                                  
+                Ok <- as.matrix(bdiag(O1, O2))
             }
 
             
@@ -119,6 +134,7 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
             
             ## save samples        
             if(i %% nskip==0) {
+
                 Usamps[, , k, i/nskip] <- Ulist[[k]]
                 Osamps[, , k, i/nskip] <- t(V) %*% Ulist[[k]]
 

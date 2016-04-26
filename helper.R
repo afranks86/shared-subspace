@@ -1,6 +1,7 @@
 library(rstan)
-
 library(mvtnorm)
+library(Matrix)
+library(magrittr)
 
 ## stanstart <- stan(file="vectorBMF.stan", data=list(M=9,lam=rep(1,10), gamma=rep(1, 10)), chains=1, iter=1)
 
@@ -68,16 +69,19 @@ getAgeStat <- function(normsMat) {
 
 }
 
-vectorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups) {
+posteriorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups, probRegion=0.95, hline=NULL, col=NULL, pch=NULL) {
 
-    plot(0, 0, xlim=c(-2*abs(max(pmValues)), 2*abs(max(pmValues))),
-         ylim=c(-2*abs(max(pmValues)), 2*abs(max(pmValues))), cex=0)
-    abline(h=0, lty=2)
-    abline(v=0, lty=2)
+
+    plot(0, 0, xlim=c(-pi/2, pi/2),
+         ylim=c(0, 60), cex=0, xlab="Angle", ylab=expression(lambda[1]/lambda[2]))
+    if(!is.null(hline))
+        abline(h=hline, lty=2)
+    
     
     for(g in groups) {
-        pmPsi <- getPostMeanPsi(Osamps[, ,g , ], OmegaSamps[, g, ], s2samps[g, ],
-                                nsamps)
+
+        pmPsi <- getPostMeanPsi(Osamps[, , g , ], OmegaSamps[, g, ],
+                                s2samps[g, ], nsamps)
         eigPsi <- eigen(pmPsi)
         pmValues <- eigPsi$values
         pmVectors <- eigPsi$vectors
@@ -86,24 +90,37 @@ vectorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups) {
         if(pmPoint[1] < 0)
             pmPoint <- pmPoint * c(-1, -1)
 
+
+
         PointsList <- lapply(1:nsamps, function(i) {
             LambdaSamp <- OmegaSamps[, g, i]/(1-OmegaSamps[, g, i])
             maxIndex <- which.max(LambdaSamp)
-            s2samps[g, i]*(Osamps[, maxIndex, g, i] * LambdaSamp[maxIndex]) })
+            LambdaRatio <- LambdaSamp[maxIndex]/LambdaSamp[-maxIndex]
+            O1 <- Osamps[, maxIndex, g, i]
+            angle <- atan(O1[2]/O1[1])
+            
+            c(angle, LambdaRatio)
+            
+        })
+
+
+        
         pts <- simplify2array(PointsList)
         
-        pts <- pts*rbind(sign(pts[1, ]), sign(pts[1, ]))
-
-        angles <- atan(pts[2,]/pts[1,])
-        qtls <- quantile(angles, c(0.025, 0.975))
-        indices <- which(angles >= qtls[1] & angles <= qtls[2])
-
-        pts <- pts[, indices]
-        
+        numPtsToRemove <- round(nsamps*(1-probRegion))
+        while(numPtsToRemove > 0) {
+            hullPoints <- chull(pts[1, ], pts[2, ])
+            if(length(hullPoints) > numPtsToRemove) {
+                hullPoints <- sample(hullPoints, numPtsToRemove)
+                pts <- pts[, -hullPoints]
+                numPtsToRemove <- 0
+            } else{
+                pts <- pts[, -hullPoints]
+                numPtsToRemove <- numPtsToRemove - length(hullPoints)
+            }
+        }
         hullPoints <- chull(pts[1, ], pts[2, ])
-        polygon(pts[1, hullPoints], pts[2, hullPoints], col=alpha(g, 1/2))
-
-        points(pmPoint[1], pmPoint[2], pch=19, cex=1, col=g)
+        points(pts[1, ], pts[2, ], col=alpha(col[g], 1/2), pch=pch[g], cex=0.5)
 
     }
 }
@@ -250,15 +267,11 @@ rsomega_gibbs <- function(S, U, s2, n, omega, a=1, b=1) {
 
 ## Shared subspace Sampling
 ## phi is the prior concentration
-sampleO <- function(SC, U, s2, omega, V, phi=0) {
+sampleO <- function(SC, U, s2, omega, V) {
 
     O <- t(V) %*% U
 
-    ## if phi > 0, prior concentrates around first R eigenvectors of V
-    prior.target <- matrix(0, nrow=ncol(V), ncol=ncol(V))
-    prior.target[1:ncol(U), 1:ncol(U)] <- phi*diag(ncol(U))
-
-    A <- t(V) %*% (SC/(2*s2)) %*% V + prior.target
+    A <- t(V) %*% (SC/(2*s2)) %*% V 
     B <- diag(omega, nrow=length(omega))
 
     ord <- order(omega, decreasing=TRUE)
@@ -890,7 +903,7 @@ getVectorBMFMode <- function(A, b, vinit) {
         
 }
 
-optimV <- function(Slist, P, S, R=S, nvec,
+optimV <- function(Slist, P, S, R=S, Q=S-R, nvec, PhiList, PrecVec,
                    Vinit=NULL, tauStart=1, rho1=0.1, rho2=0.9,
                    maxIters=50, verbose=FALSE) {
 
@@ -899,25 +912,11 @@ optimV <- function(Slist, P, S, R=S, nvec,
     else
         V <- Vinit
 
-    ## E[ 1/sigma^2 * (psi+I)^(-1) | V]
-    PsiList <- list()
-    for(k in 1:length(Slist)) {
-        PsiList[[k]] <- solve(t(V) %*% Slist[[k]] %*% V) *
-            (nvec[k] + R +1 )
-    }
-
-    ## E[ 1/sigma^2  | V]
-    PrecVec <- c()
-    for(k in 1:length(Slist)) {
-        PrecVec[k] <- (nvec[k] * (P - R) + 2) /
-            (tr(Slist[[k]]) - tr( t(V) %*% Slist[[k]] %*% V ))
-    }
-    
     F <- function(V) {
         obj <- 0
-        for(k in 1:length(PsiList)) {
+        for(k in 1:length(PhiList)) {
             obj <- obj +
-                1/2 * tr(  t(V) %*% Slist[[k]] %*% V %*% PsiList[[k]] ) -
+                1/2 * tr(  t(V) %*% Slist[[k]] %*% V %*% PhiList[[k]] ) -
                 1/2 * PrecVec[k] * tr(t(V) %*% Slist[[k]] %*% V)
         }
         obj
@@ -925,37 +924,37 @@ optimV <- function(Slist, P, S, R=S, nvec,
     
 
     G <- 0
-    for(k in 1:length(PsiList)) {
+    for(k in 1:length(PhiList)) {
 
-        G <- G + Slist[[k]] %*%  (V %*%  PsiList[[k]])  -
+        G <- G + Slist[[k]] %*%  (V %*%  PhiList[[k]])  -
             PrecVec[k] * Slist[[k]] %*%  V
     }
 
     iter <- 1
     Fprev <- 0
     Fcur <- F(V)
-
     while(Fprev/Fcur < 1-1e-6 & iter < maxIters) {
-
-        if(verbose) {
-            print(sprintf("Iteration %i: %f", iter, Fprev))
-        }
 
         ## Update F(V)
         Fprev <- Fcur
+        
+        if(verbose) {
+            print(sprintf("Iteration %i: %f", iter, Fprev))
+        }
+        
         V <- lineSearch(P, S, V, G, F, rho1, rho2, tauStart)
         Fcur <- F(V)
         
         G <- 0
-        for(k in 1:length(PsiList)) {
-            G <- G + Slist[[k]] %*%  (V %*%  PsiList[[k]])  -
+        for(k in 1:length(PhiList)) {
+            G <- G + Slist[[k]] %*%  (V %*%  PhiList[[k]])  -
                 PrecVec[k] * Slist[[k]] %*% V
         }
 
         iter <- iter + 1
     }
 
-    list(V=V, PrecVec=PrecVec, PsiList=PsiList)
+    V
 }
 
 
@@ -1012,22 +1011,70 @@ lineSearch <- function(n, p, X, G, F, rho1, rho2, tauStart, maxIters=50) {
     Ytau 
 }
 
-subspaceEM <- function(Slist, P, S, R=S, nvec, rho1=0.1, rho2=0.9,
+subspaceEM <- function(Slist, P, S, R=S, Q=0, nvec, rho1=0.1, rho2=0.9,
+                       PrecVec=NULL,
+                       PhiList=NULL,
                        Vstart=NULL,
                        maxIters=10,
                        verbose=FALSE) {
     
-    if(is.null(Vstart))
-        Vstart <- optimV(Slist, P=P, S=S, R=R, nvec=nvec, rho1=rho1, rho2=rho2,
-                         verbose=verbose)$V
-    
+    if(is.null(Vstart)) {
+        Vstart = rustiefel(P, S)
+    }
+    if(is.null(PhiList)) {
+
+        PhiList <- list()
+
+        ## E[ 1/sigma^2 * (psi+I)^(-1) | V]
+        PhiList <- list()
+        V1 <- Vstart[, 1:R]
+        V2 <- Vstart[, (R+1):S]
+
+        Ssum <- Reduce('+', Slist)
+        PhiShared <- solve(t(V2) %*% Ssum %*% V2) * (sum(nvec) + Q +1 )
+
+        for(k in 1:length(Slist)) {
+            PsiK <- solve(t(V1) %*% Slist[[k]] %*% V1) * (nvec[k] + R +1 )
+            PhiList[[k]] <- as.matrix(bdiag(PsiK, PhiShared))
+        }
+    }
+    if(is.null(PrecVec)) {
+        ## E[ 1/sigma^2  | V]
+        PrecVec <- c()
+        for(k in 1:length(Slist)) {
+            PrecVec[k] <- (nvec[k] * (P - S) + 2) /
+                (tr(Slist[[k]]) - tr( t(Vstart) %*% Slist[[k]] %*% Vstart ))
+        }
+    }
+
     convCheck <- Inf
-    iter <- 1
+    iter <- 0
     while(convCheck > 1e-6 & iter < maxIters ) {
-        optimList <- optimV(Slist=Slist, P=P, S=S, R=R, nvec,
+        Vnew <- optimV(Slist=Slist, P=P, S=S, R=R, Q=Q, nvec,
+                            PhiList=PhiList, PrecVec=PrecVec,
                             rho1=rho1, rho2=rho2, Vinit=Vstart, verbose=verbose)
-        Vnew <- optimList$V
-        print(optimList$PrecVec)
+
+        ## E[ 1/sigma^2 * (psi+I)^(-1) | V]
+        PhiList <- list()
+        V1 <- Vnew[, 1:R]
+        V2 <- Vnew[, (R+1):S]
+
+        Ssum <- Reduce('+', Slist)
+        PhiShared <- solve(t(V2) %*% Ssum %*% V2) * (sum(nvec) + Q +1 )
+    
+        for(k in 1:length(Slist)) {
+            PsiK <- solve(t(V1) %*% Slist[[k]] %*% V1) * (nvec[k] + R +1 )
+            PhiList[[k]] <- as.matrix(bdiag(PsiK, PhiShared))
+        }
+
+        ## E[ 1/sigma^2  | V]
+        PrecVec <- c()
+        for(k in 1:length(Slist)) {
+            PrecVec[k] <- (nvec[k] * (P - S) + 2) /
+                (tr(Slist[[k]]) - tr( t(Vnew) %*% Slist[[k]] %*% Vnew ))
+        }
+
+        print(PrecVec)
         convCheck <- 1 - (norm(t(Vstart) %*% Vnew, type="F")/sqrt(S))
         Vstart <- Vnew
         iter <- iter + 1
@@ -1035,7 +1082,7 @@ subspaceEM <- function(Slist, P, S, R=S, nvec, rho1=0.1, rho2=0.9,
         
     }
     
-    optimList
+    list(V=Vnew, PhiList=PhiList, PrecVec=PrecVec)
 }
 
 
