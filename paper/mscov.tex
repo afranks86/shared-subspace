@@ -1,0 +1,644 @@
+\documentclass{article}
+
+\usepackage{graphicx}
+\usepackage{latexsym}
+\usepackage{textcomp}
+\usepackage{longtable}
+\usepackage{multirow, booktabs}
+\usepackage{amsfonts,amsmath,amssymb}
+\usepackage{natbib}
+\usepackage{url}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{mathtools}
+\usepackage{chemarrow}
+\usepackage{subcaption}
+\usepackage{amsmath}
+\usepackage{mathtools}
+\usepackage{rotating}
+\usepackage{multirow}
+\usepackage[margin=.75in]{geometry}
+
+\renewcommand{\baselinestretch}{1.5}
+\newcommand{\bl}[1]{{\mathbf #1}}
+\newcommand{\bs}[1]{{\boldsymbol #1}}
+\newcommand{\tr}{\text{tr}}
+\newcommand{\etr}{\text{etr}}
+\newcommand{\Exp}[1]{{\text{E}}[ \ensuremath{ #1 } ]  }
+
+\begin{document}
+
+\title{Shared Subspace Model}
+
+
+\date{\today}
+
+\bibliographystyle{plain}
+\title{Shared Subspace Covariance Model}
+\author{Alexander Franks and Peter Hoff}
+\date{\today}
+\maketitle 
+
+
+
+\begin{abstract}
+  We develop model-based methods for evaluating similarities and
+  differences among several $p\times p$ covariance matrices in the
+  $p>n$ setting.  This is done by assuming a spiked covariance model
+  for each group, and sharing information about the subspace spanned
+  by the group-level eigenvectors.  We propose an EM algorithm for
+  estimating the shared subspace and covariance matrix of the data
+  projected onto this subspace.  In addition, we provide an Gibbs
+  sampling algorithm for estimating the posterior uncertainty of
+  group-level eigenvectors and eigenvalues on this subspace.
+
+\end{abstract}
+
+% \section{NOTES}
+
+% \begin{itemize}
+% \item For MSCov to work in no-pooeld case need $R < S$ (doens't work if $S=P$).
+% \item Explore the effect on estimation when R=2 two eigenvalues converge/diverge.
+% \item TODO: Experiments: 
+% \begin{itemize}
+% \item S=20, R=2, data generated under no-pooled model.
+% \item Fit with R=2 to R=20, Fix S=20
+% \item Fit with R=2, S=5 to 20
+% \item Fix $1/(1-Y^2)$ bug for Y=1
+% \item debeta_un = 0 for large sample sizes (underflows)
+% \item Check that CP models yield same results using fitBayesianSpike and fit-subspace.
+% \end{itemize}
+% \end{itemize}
+
+
+
+\section{Introduction}
+
+
+%\citet{donoho_gavish_johnstone_2013} 
+%\citet{paul_2007}
+
+\section{The Spiked Covariance Model}  
+Suppose $\bl S$ has a possibly degenerate Wishart$(\Sigma,n$) 
+distribution with density 
+given by 
+\begin{equation} 
+p(\bl S | \Sigma, n) \propto_{\Sigma} l(\Sigma:\bl S) =  |\Sigma|^{-n/2} \text{etr}( - \Sigma^{-1} \bl S/2 ) ,  
+\label{eqn:lik}
+\end{equation}
+where $\Sigma \in \mathcal S_p^+$ and $n$ may be less than $p$. 
+
+% However, when the population size is large and comparable with the
+% sample size, as is in many contemporary data, it is known that the
+% sample covariance matrix is no longer a good approximation to the
+% covari- ance matrix. Baik
+ 
+Such a likelihood results from $\bl S$ being, for example, a residual 
+sum of squares matrix from a multivariate regression analysis. In  this case,
+$n$ is the number of independent observations minus the 
+rank of the design matrix. 
+The spiked principle 
+components model (spiked PCA) introduced by \citet{Johnstone2001} assumes that 
+%\begin{equation} 
+$\Sigma = \sigma^2 (  \bl U  \Lambda  \bl U^T  + \bl I )$  ,  
+%\end{equation}
+where $\Lambda$ is an $r\times r$ diagonal matrix and 
+$\bl U \in \mathcal V_{r,p}$, with 
+%$r< ( n \wedge p)$. 
+$r<p$. Such a formulation is appealing because it explicitly
+partitions the covariance into a tractable low rank ``signal'' and
+homscedastic ``noise''.  
+
+
+
+For such a covariance matrix, we have
+$\Sigma^{-1} = (\bl U \Lambda \bl U^T + \bl I )^{-1} = \bl I - \bl U
+\Omega \bl U^T $
+where $\Omega = \text{diag}(\omega_1,\ldots, \omega_r)$ with
+$\omega_s = \lambda_j/(\lambda_s+1)$.  The likelihood (\ref{eqn:lik})
+in terms of $(\sigma^2,\bl U, \Omega)$ is then
+\begin{equation}
+L(\sigma^2,\bl U , \Omega : \bl Y)  = 
+(\sigma^2)^{-np/2} \etr(-\bl S/[2\sigma^2]) \times 
+   \etr( \Omega \bl U^T [\bl S/(2\sigma^2)] \bl U ) \times  
+ \left\{ \prod_{s=1}^r (1-\omega_s)^{n/2} \right \} .  
+\label{eqn:rplik}
+\end{equation}
+
+Classical results for parametric models 
+(e.g., \citet{schwartz_1965})  
+imply that 
+asymptotically in $n$ for fixed $p$, a Bayes estimator
+will be consistent for a spiked  population covariance 
+as long as the assumed number of spikes is greater than or equal to 
+the true number. 
+However, the situation is more difficult 
+when both $n$ and $p$ are large.  
+%Since a Bayes estimator for an invariant loss function 
+%is orthogonally equivariant under this prior, 
+%it can be expressed as 
+%$\hat \Sigma(\bl S) = \bl E \bl D(\bl L) \bl E^T$, 
+%where $\bl E$ and $\bl L$ are the matrices of eigenvectors and 
+%eigenvalues of $\bl S$, and $\bl D$ denotes a diagonal matrix 
+%that is a function of $\bl L$. 
+%As a result 
+Under the spiked covariance model, 
+results of 
+\citet{Baik2006, Paul2007} indicate that if 
+$p/n \rightarrow \gamma >0$ as $n\rightarrow \infty$,   
+the top $r$ eigenvalues of $\bl S/(n\sigma^2)$ will converge 
+to upwardly  biased versions of $(\lambda_1+1,\ldots, \lambda_r+1)$, 
+if each $\lambda_s $ is greater than $\sqrt{\gamma}$.   
+This has led several authors to suggest estimating 
+$\Sigma$ via shrinkage of the eigenvalues of the sample covariance 
+matrix. In particular, 
+in the setting that $\sigma^2$ is known, 
+\citet{Donoho2013} propose  
+setting all sample eigenvalues that fall below 
+the value $(1+\sqrt{\gamma})^2$ to be one, and shrinking the larger 
+eigenvalues in a way that depends on the particular 
+loss function being used. 
+These shrinkage functions are shown to be asymptotically 
+optimal in the $p/n\rightarrow \gamma$ setting. 
+
+As demonstrated by Gavish et al \citep{Gavish2014}, even when the
+true rank is large, if blah it is still asymptotically preferable to fit a lower rank
+blah .  it is always better than hard thresholding at any other value, and is always better than ideal truncated singular value decomposition (TSVD)
+
+Bayes estimators under the prior distribution described above 
+can also be viewed as eigenvalue shrinkage estimators: 
+Since a Bayes estimator for an invariant loss function 
+is orthogonally equivariant under this prior, 
+it can be expressed as 
+$\hat \Sigma(\bl S) = \bl E  \hat \Sigma (\bl L) \bl E^T$, 
+where $\bl E$ and $\bl L$ are the matrices of eigenvectors and 
+eigenvalues of $\bl S$. Furthermore, it is straightforward to 
+show that $\hat \Sigma (\bl L)$ must be a diagonal matrix, 
+and so the Bayes estimator is obtained by applying the 
+shrinkage function $\hat\Sigma$ to the sample eigenvalues $\bl L$. 
+Understanding of this shrinkage function could in principle 
+be pursued by investigation of the posterior distribution of the 
+eigenvalue parameters $\Lambda$, or equivalently their  
+transformed values $\Omega$.   
+
+However, in many modern applications, the primary objective is to
+compare covariances across multiple groups of observations.  For
+instance, Cite
+Daniela Witten.  Hoff eigenpooling, no longer equivariance.  In suhc a
+situation, equivariance blah blah.  In the following section, we
+propose a model for estimating and exploring differences between
+covariance matrices from multiple groups of related data.
+
+\section{The Shared Subspace Spiked Covariance Model}
+
+Assume we have $k=1, ..., K$ groups of matrices $\bl S_k$ which follow
+the spiked covariance model with density as given in
+\ref{eqn:rplik}.    Each group consists of of $n_k$ measurements of $p$ features, typically with $n_k << p$.  However, we assume that the eigenvectors
+are related across groups in a particular way.  \citet{Hoff2009}
+introduced a model for eigenvector shrinkage based on the matrix Bingham
+distribution.  
+
+In contrast, in this paper, we assume a priori that the eigenvectors
+are uniformally distributed on a low rank common subspace.  That is, 
+
+\begin{equation}
+\Sigma_k = V\psi_kV^T + \sigma^2_kI
+\end{equation}
+
+With $V \in \mathcal{V}_{s,p}$ with $p
+\geq s \geq r$.  Here, $VV^T \in \mathcal{G}_{s, p}$ is the plane of
+variation shared by all groups and $\psi_k$ is the rank-r covariance matrix
+on that subspace.  \textbf{Rationale}.  
+
+In this paper, as in blah we consider a model on eigendecomposition of
+$\psi_k$ so that Equation \ref{} can be written as
+
+\begin{equation}
+\Sigma_k = VO_k\Lambda_KO_k^TV^T + \sigma^2_kI
+\end{equation}
+
+Where, $\Lambda_k$ is and $r \times r$ diagonal matrix of eigenvalues,
+and $O_k \in \mathcal{V}_{s,r}$ is the matrix of eigenvectors of
+$\psi_k$.  Note that for any single group we can recover the original
+spiked covariance formuation (Equation
+\ref{}) by letting $U_k = VO_k$.
+
+The likelihood for $\Sigma_k$ given the sufficient statistic $\mathbf{S}_k = Y_kY_k^T$ is simply
+
+\begin{equation}
+p(S | \Sigma_k,n_k) \propto \prod_{k=1}^K |\Sigma_k|^{-n/2}etr(-\Sigma_k^{-1}\mathbf{S}_k/2)
+\end{equation}
+
+First note that by the Woodbury matrix identity we can show that 
+\begin{align}
+\Sigma^{-1}_k &=  (\sigma_k^2(U_k\Lambda_kU_k^T+I))^{-1}\\
+&= \frac{1}{\sigma_k^2}(U_k\Lambda_kU_k^T+I)^{-1}\\
+&= \frac{1}{\sigma_k^2}(I-U_k\Omega_kU_k^T)\\
+\end{align}
+
+Where the diagonal matrix $\Omega = \Lambda(I+\Lambda)^{-1}$, e.g. $\omega_i = \frac{\lambda_i}{\lambda_{i}+1}$.  
+
+ Further, 
+
+\begin{align}
+|\Sigma_k| &= (\sigma_k^2)^{p}|U_k\Lambda_kU_k^T+I|\\
+&= (\sigma_k^2)^{p}|\Lambda_k+I| \\
+&= (\sigma_k^2)^{p}\prod_{i=1}^r(\lambda_i+1)\\
+&= (\sigma_k^2)^{p}\prod_{i=1}^r(1-\omega_i)
+\end{align}
+
+where the second line is due to Sylvester's determinant theorem.
+
+Substituting for $\Sigma^{-1}_k$ and $|\Sigma_k|$ we have the likelihood of $V$, $O_k$, $\Lambda_k$ and $\sigma_k^2$
+
+We can write the likelihood of $V$, $O_k$, $\Lambda_k$ and
+$\sigma_k^2$ given $Y_k$ using Equation \ref{eqn:rplik} by replacing
+$U_k$ with $VO_k$: 
+\begin{equation}
+ L(\sigma_k^2,\bl V , O_k \Omega_k : \bl Y_k) \propto \prod_{k=1}^K\left[ (\sigma_k^2)^{-n_kp/2}etr(-\frac{1}{2\sigma_k^2}\mathbf{S}_k)\left(\prod_{i=1}^r(1-\omega_{ki}) \right) ^{n_k/2}  etr(\frac{1}{2\sigma_k^2}(VO_k\Omega_kO_k^TV^T)\mathbf{S}_k) \right]
+\end{equation}
+
+
+\subsection*{An Expectation-Maximization Algorithm For Estimating the Shared Subspace}
+
+We start by outlining a computationally efficient algorithm for
+estimating the shared subspace, $VV^T$.  
+
+The full likelihood can be written as
+
+\begin{align}
+p(\bl S | \Sigma_k,n_k) &\propto \prod_{k=1}^K |\Sigma_k|^{-n_k/2}etr(-\Sigma_k^{-1}\mathbf{S}_k/2)  \\
+&\propto \prod_{k=1}^K  |\Sigma_k|^{-n_k/2}etr(-(\sigma_k^2(V\psi_kV^T +
+  I))^{-1}\mathbf{S}_k/2) \\
+&\propto \prod_{k=1}^K  |\Sigma_k|^{-n_k/2}etr(-\left[V(\psi_k +
+  I)^{-1}/\sigma_k^2 V^T + (I-VV^T)/\sigma^2_k\right]\mathbf{S}_k/2)
+  \\
+&\propto \prod_{k=1}^K  (\sigma_k^2)^{-n_k(p-r)/2}|M_k|^{-n_k/2}etr(-\left[VM_k^{-1}V^T + \frac{1}{\sigma^2_k} (I-VV^T)\right]\mathbf{S}_k/2) 
+\end{align}
+
+Where $M_k^{-1} = (\psi_k + I) ^{-1}/\sigma_k^2$.  The log-likelihood in
+$V$ (up to additive constant) is
+
+\begin{align}
+l(V) &= \sum_k tr\left(-VM_k^{-1}V^T +
+       VV^T/\sigma^2_k\right)\mathbf{S}_k/2)\\
+&= \sum_k \frac{1}{2}tr\left(-M_k^{-1}V^T \mathbf{S}_kV\right) + \frac{1}{2\sigma_k^2}tr\left(VV^T \mathbf{S}_k\right)
+\end{align}
+
+% \begin{align}
+% p(V|...) &\propto etr(\sum_{k=1}^K[O_k\Omega_kO^T_k]V^TS_k/(2\sigma^2_k)]V)\\
+% \end{align}
+
+To find the maximum marginal likelihood of $V$, we use an EM approach,
+treating the $M_k^{-1}$ and $\frac{1}{\sigma_k^2}$ as the ``missing''
+parameters to be imputed. %%We assume a Wishart prior on $M_k^{-1}$ and an Gamma prior
+on $\frac{1}{\sigma_k^2}$.  If we take these prior's to be
+``non-informative'' degenerate priors, we have
+
+We put a Jeffreys prior on both $M_k^{-1}$ and $\frac{1}{\sigma_k^2}$.  
+
+$$p(M_k^{-1} | V) \propto |M_k^{-1}|^{n_k/2}etr(-1/2(M_k^{-1}V^T\mathbf{S}_kV)) $$
+
+\noindent which is a Wishart($V^T\mathbf{S}_kV$, $n_k + r + 1$).
+
+\noindent For $\frac{1}{\sigma_k^2}$ we have
+
+$$p\left(\frac{1}{\sigma^2} | V\right) \propto \left(\frac{1}{\sigma_k^2}\right)^{n_k(p-r)/2}etr\left(-\frac{1}{2\sigma^2_k} (I-VV^T)\mathbf{S}_k\right)  $$
+
+\noindent which is a Gamma($n_k(p-r)/2+1$, $\frac{1}{2}tr((I-VV^T)\mathbf{S}_k)$)
+
+\noindent Thus, for each iteration, $t$, of the EM algorithm:
+
+\begin{enumerate}
+\item For each $k$, compute relevant conditional expectations:
+\begin{enumerate}
+\item $E[M_k^{-1} | V_{t-1}] = (n_k + r  + 1)(V^T \mathbf{S}_kV)^{-1}$
+\item $E[\frac{1}{2\sigma_k^2}|V_{t-1}] = \frac{n_k(p-r) + 2}{tr((I-VV^T)S_k)}$
+\end{enumerate}
+\item Compute $V_{t}$ = $\underset{V}{argmax}  \sum_k tr\left(-VE[M^{-1}|V_{t-1}]V^T +
+       E[\frac{1}{2\sigma_k^2}|V_{t-1}]VV^T\right)\mathbf{S}_k/2)$ (optimization
+  approach from Wen et al, 2013)
+\end{enumerate}
+
+\subsection{Alternative formulation}
+$M_k = \sigma_k^2(\Phi_k + I)$ where 
+$$ \Phi_k =\left( \begin{array}{cc}
+\Psi_k & 0  \\
+0 & D  \end{array} \right)$$
+
+Letting $V = [V_1\, V_2]$
+
+\begin{eqnarray*}
+p(M_k^{-1} | V) &\propto \prod_k |M_k^{-1}|^{n_k/2}etr(-1/2(M_k^{-1}V^T\mathbf{S}_kV)) \\
+                & = (|\psi_k + I|^{-1}|D +
+                  I|^{-1})^{n_k/2}etr(-1/2((\psi_k+I)^{-1}V_1^T\mathbf{S}_kV_1
+                  -1/2(D+I)^{-1}V_2^T\mathbf{S}_kV_2)) \\
+\end{eqnarray*}
+
+
+$$p(\frac{1/d_i} | V) \propto \prod_k (d_i + 1)^{-n_k/2}exp\left(\frac{1}{-1/2(d_i+1)}(V_2^T\mathbf{S}_kV_2)_{i,i}\right) $$
+
+
+\section{Bayesian Inference}
+
+\subsection{Prior and posterior distributions}
+
+\paragraph{Conditional estimation of $(\sigma^2, \bl U)$:}
+Bayesian inference is facilitated with the use of semiconjugate 
+prior distributions  for $(\sigma^2, \bl U)$.
+These include the inverse-gamma class of priors for $\sigma^2$, 
+and the von Mises-Fisher-Bingham  
+distributions for $\bl U$ \citep{hoff_2009a,hoff_2009b}.  
+In the absence of real prior information,  invariance 
+considerations suggest the use of priors on $\sigma^2$ and 
+$\bl U$ that lead to equivariant estimators. 
+In particular, an (improper) prior having density 
+$p(\sigma^2,\bl U) = 1/\sigma^2 $, with respect to the 
+product of Lebesgue measure on $\mathbb R^+$ and the 
+uniform probability measure on $\mathcal V_{r,p}$, 
+leads to Bayes estimators $\hat \Sigma(\bl S)$ that 
+are equivariant with respect to 
+rotations and scale changes, so that 
+$\hat \Sigma(a \bl W \bl S \bl W^T) = 
+   a \bl W \hat\Sigma(\bl S) \bl W$ for all 
+$a>0$ and $\bl W\in \mathcal O_{p}$  
+(assuming an invariant loss function).  
+Under this invariant prior, straightforward calculations
+show that the full conditional distribution of
+$\sigma^2$ is
+inverse-gamma$( n p/2 , \tr(\bl S(\bl I-\bl U\Omega\bl U)/2)$.
+%Under the uniform prior on $\mathcal V_{r,p}$,
+The full conditional distribution of $\bl U$ has a density proportional
+to the likelihood, so
+\[
+ p(\bl U | \bl S, \sigma^2, \Omega) \propto 
+  \etr( \Omega \bl U^T [\bl S/(2\sigma^2) \bl U). 
+\]
+This is a Bingham$(\Omega, \bl S/(2\sigma^2)$ distribution on
+$\mathcal V_{r,p}$ \citep{khatri_mardia_1977}. A Gibbs sampler to
+simulate from this distribution is given in
+\citet{hoff_2009a}.
+Interestingly, if $\Omega$ were known (which it is not), then 
+for a given invariant loss function
+the Bayes estimator under this prior 
+minimizes the (frequentist) risk among all 
+equivariant estimators \citep{eaton_1989}. 
+
+\paragraph{Estimation of $\Omega$:} 
+We first consider a uniform(0,1) prior distribution  for
+each element of $\Omega$, or equivalently, an 
+$F_{2,2}$ prior distribution for the elements of $\Lambda$. 
+As a result, the full conditional distribution of 
+an element  $\omega_s$ of $\Omega$ is proportional to the 
+likelihood function, so 
+%an inverse-gamma$(\nu_0/2 , \nu_0 \sigma_0^2/2)$  prior distribution for  
+%$\sigma^2$  gives an inverse-gamma$(\nu_n/2 , \nu_n \sigma_n^2/2)$
+%full conditional distribution, 
+%where  $\nu_n = \nu_0+np$ and 
+%  $\nu_n \sigma_n^2  = \nu_0\sigma_0^2 + 
+%   \tr(\bl S(\bl I-\bl U\Omega\bl U))$. 
+\begin{equation} 
+p(\omega_s | \bl U, \bl S, \sigma^2)   \propto_{\omega_s} 
+ l(\sigma^2,\bl U, \Omega:\bl S)  \propto_{\omega_s} 
+  (1-\omega_s)^{n/2} e^{c \omega_s  n/2},    
+\label{eqn:wpost}
+\end{equation}
+where $c= \bl u_s^T \bl S \bl u_s/(n \sigma^2)$ and 
+$\bl u_s$ is column $s$ of $\bl U$. 
+While not proportional to a density belonging to a standard class 
+of distributions, 
+the corresponding 
+univariate distribution is easy to sample from numerically, and 
+its 
+behavior is straightforward to 
+understand:
+%First note that the likelihood 
+%\ref{eqn:lik} is maximized in 
+%if $\bl S \approx n \Sigma$, 
+%and $\bl U$ and $\sigma^2$ are approximately close to thier 
+%correct values, then $c\approx  $
+If $c\leq 1$, then the the function has a maximum 
+at $\omega_s =0$, and decays monotonically to zero as $\omega \rightarrow 1$. 
+%If $c<n/2$ then the derivative is negative at zero, 
+%whereas 
+If $c>1$ then the function is uniquely  maximized at 
+$(c-1)/c \in (0,1)$. 
+To see why this makes sense, note that the likelihood is maximized when 
+the columns of 
+$\bl U$ are equal to the eigenvectors of $\bl S$ corresponding to its top 
+$r$ eigenvalues \citep{tipping_bishop_1999}. At this value of $\bl U$, 
+$c$ will then equal one of the top $r$ eigenvalues of $\bl S/(n\sigma^2)$. 
+In the case  that $n\gg p$, we expect  $\bl S/(n\sigma^2)\approx \Sigma_0/\sigma^2$, 
+the true (scaled) population covariance, and so we expect $c$ to be near one of the 
+top $r$ eigenvalues of $\Sigma_0/\sigma^2$, say $\lambda_0+1$. 
+If indeed $\Sigma_0$ has 
+$r$ spikes, then  $\lambda_0>0$, $c \approx \lambda_0 +1 > 1$, and so the conditional 
+mode of $w_s$ is approximately $(c-1)/c = \lambda_0/(\lambda_0+1)$, 
+the correct value. 
+On the other hand, if we have assumed the existence of a spike when 
+there is none, then $\lambda_0=0$, $c\approx 1$ and the Bayes estimate 
+of $w_s$ will be shrunk towards zero, as it should be. 
+
+
+
+\subsection*{Conditional distribution of $\sigma_k^2$}
+TODO: Inverse-Gamma conjugacy
+
+\subsection*{Conditional distribution of $\Lambda$}
+Here, we specify the conditional distribution of $\Omega = \Lambda(I+\Lambda)^{-1}$.  
+
+\begin{align}
+p(\Omega_k|V,O_k,\Lambda_k,\Sigma_k) \propto \left(\prod_{i=1}^r(1-\omega_{ki})^{n_k/2}  \right) etr(\frac{1}{2\sigma_k^2}(VO_k\Omega_kO_k^TV^T)\mathbf{S}_k) 
+\end{align}
+
+TODO: Finish
+
+\subsection*{Conditional distribution of $O_k$}
+
+\begin{align}
+\label{lik_vo}
+ p(O_k | \sigma^2_k, U_k, \Omega_k) & \propto etr(\Omega_kO^T_kV^T[S_k/(2\sigma^2_k)]VO_k)
+\end{align}
+
+Assuming a uniform distribution on $O_k$, the conditional distribution of $O_k$ is clearly a matrix Bingham distribution with parameters $\Omega_k$ and $V^T[S_k/(2\sigma^2_k)]V$.  It may be desirable to specify a conjugate prior for $O_k$:
+
+\begin{equation}
+P(O_k|\Omega_k) = etr(\Omega_kO_kHO_k^T)
+\end{equation}
+
+in which case the conditional distribution is simply
+\begin{equation}
+P(O_k|...) \propto etr(\Omega_kO^T_k(V^T[S_k/(2\sigma^2_k)]V + H)O_k)
+\end{equation}
+which is still a matrix Bingham with parameters $\Omega_k$ and $V^T[S_k/(2\sigma^2_k)]V+H$
+\subsection*{Conditional distribution of $V$}
+\begin{align}
+p(V|...) &\propto etr(\sum_{k=1}^K[S_k/(2\sigma^2_k)]V[O_k\Omega_kO^T_k]V^T)\\
+\end{align}
+
+Let, $A_k = S_k/(2\sigma^2_k)$ and $B_k = O_k\Omega_kO^T_k$.  We can write the conditional distribution of $V$ (again assuming a uniform prior) given $A_k$ and $B_k$ as
+\begin{align}
+P(V|A_k,B_k) &\propto etr(\sum_{k=1}^KA_kVB_kV^T)\\
+&= etr(\sum_{k=1}^K\sum_{i,j}^sA_kv_iv_j^Tb_{ijk})\\
+&= etr(\sum_{i,j}^s \sum_{k=1}^K v_j^T[b_{ijk}A_k]v_i)
+\end{align}
+
+From here, we specify the conditional distribution of a single column of $V$ given $A_k$, $B_k$ and all other columns of V:
+
+\begin{align}
+P(v_i|A_k,B_kV_{-i})  &\propto etr(2(\sum_{j\neq i}^s v_j^T[\sum_{k=1}^K b_{ijk}A_k])v_i+v_i^T[\sum_{k=1}^K b_{ijk}A_k]v_i))\\
+&= etr(Cv_i+v_i^TMv_i)
+\end{align}
+
+This is a vector BMF(C,M) with $C = 2(\sum_{j\neq i}^s v_j^T[\sum_{k=1}^K b_{ijk}A_k])$ and $M= \sum_{k=1}^K b_{ijk}A_k$.  
+
+% \begin{align}
+% P(V|O_k,\Omega_k,\sigma^2_k,\mathbf{S}_k) = (\sigma^2_k)^{-n_kp}etr(\sum_{k=1}^K[S_k/(2\sigma^2_k)]V[O_k\Omega_kO^T_k]V^T)\\
+% \end{align}
+
+\pagebreak
+
+\section{Simulation Study}
+
+First, we present the results of a simulation which demonstrates the
+relative performance of shared subspace group covariance estimation
+under different data generating models.  We consider three different
+spiked covariance data models: 1) ``complete pooling'', in which the
+covariance matrices from all groups are identical, e.g.
+$\Sigma_1 = \Sigma_2 = ... \Sigma_K$; 2) ``shared subspace'', where
+the signal lies on the same low rank subspace (Equation \ref{}); and 3) ``no
+pooling'' assuming little overlap in the eigenvectors of the
+covariance matrices (Equation \ref{}).  For each of these data models, we
+simulated 30 datasets from a spiked covariance model with rank $r=2$
+and eigenvalues $(\lambda_1, \lambda_2) = (250, 25)$.  
+
+We evalute the three corresponding inferential models,
+corresponding to the complete pooling blah and blah.
+
+For each group, $k$, we compute Stein's loss
+$L_S( \Sigma_k , \hat\Sigma_k) = \text{tr}( \Sigma_k^{-1} \hat
+\Sigma_k ) - \log |\Sigma_k^{-1} \Sigma_k | - p$.
+Under Stein's loss, the Bayes estimator is the inverse of the
+posterior mean of the precision matrix,
+$\hat \Sigma_{BS} = \Exp{ \Sigma^{-1} | \bl S}^{-1}$ which can easily
+be esimated using posterior samples.  In Table \ref{table:groupLoss}
+we report the average group loss
+$L(\Sigma_1, ..., \Sigma_K; \hat\Sigma_1, ..., \hat\Sigma_K ) =
+\frac{1}{K} \sum_k L_S( \Sigma_k , \hat\Sigma_k)$.  
+
+\citep{Paul2007, Donoho2013}. 
+
+The results demonstrate that 
+
+\begin{table}
+\begin{center}
+  \begin{tabular}{ l  l | c | c | c |}
+    \multicolumn{2}{c}{} & \multicolumn{3}{c}{\textbf{Inferential Model}} \\
+  \multicolumn{2}{c|}{}  & Shared Subspace & Complete Pooling & No pooling \\  \cline{2-5}
+    \multirow{3}{*}{\rotatebox[origin=c]{90}{\textbf{Data Model}}} & 
+   Shared Subspace & 0.8 & 2.1 & 3.0 \\ \cline{2-5}
+   & Complete Pooling & 0.8 & 0.7 & 3.0 \\ \cline{2-5}
+   & No pooling & 8.3 & 136.3 & 3.0 \\ \cline{2-5}
+  \end{tabular}
+  \caption[Table caption text]{Stein's loss for different inferential
+    and data generating models.  For each of the $K=10$ groups, we
+    simulate a $p=200$ dimensional spiked covariance matrix for rank
+    $r=2$.  For data from a shared subspace model the eigenvectors
+    of the covariance matrix share a subspace dimension $s=2$.  All results are
+    based on $n_k = 50$ observations per group.  Shared subspace
+    inference blah between fitting each group covariance independently
+  and assuming that they are all the same.  }
+\label{table:groupLoss}
+\end{center}
+\end{table}
+
+
+\begin{figure}[!ht]
+  \centering
+    \includegraphics[width=0.5\textwidth]{Figs/LossVsDimension}
+  \caption{Stein's loss for data generated under the ``no pooling''
+    model and fit using the shared subspace model.  As the shared
+    subspace dimension increases,  $s \rightarrow p$, the loss converges
+    to the loss from the independent spiked covariance estimates.
+    Thus, the shared subspace estimator is a generalization of blah.  }
+\end{figure}
+
+
+% n <- 50
+% S <- 2
+% R <- 2
+% P <- 200
+% ngroups <- 10
+
+% evals <- c(250, 25)
+% niters <- 1000
+% nwarmup <- niters/2
+
+\subsection{Evaluating the Subspace}
+
+
+$$L_SS(\hat{V}^T\Sigma_K\hat{V} , \hat{V}^T\hat{\Sigma}_K\hat{V}) $$
+
+We propose a simple metric  to evaluate how much of the variation in $Y_k$ lies on the
+subspace spanned by $\hat{V}$:
+
+$$ \frac{||Y_k^T\hat{V}||_F}{\underset{V \in \mathcal{V}_{p, s}}{sup}
+  ||Y_k^TV||_F - \hat{\sigma}_k^2ps}$$
+
+This quantity is  as an estimate of the ratio of the first $s$
+sum of the eigenvalues of $V^T\bl \Sigma_k V$ to the sum of the first
+$s$ eigenvalues of $\Sigma_k$.  To see this, note that $\underset{V \in \mathcal{V}_{p, s}}{sup}\frac{||Y_k^TV||_F}{n_k}$
+is equivalent to the sum of the first $s$ eigenvalues of the sample
+covariance matrix $\frac{\bl S_k}{n_k}$.  Letting
+$\hat{\lambda}^{(k)}_i$ = the $i$-th eigenvalue of $\frac{\bl S_k}{n_k}$.  Asymptotically as $p, n_k \rightarrow \infty$ with
+$\frac{p}{n} = \gamma$
+
+$ \hat{\lambda}^{(k)}_i\rightarrow \lambda^{(k)}_i
+(1 + \frac{\sigma_k^2\gamma}{\lambda^{(k)}_i - 1} \approx \lambda^{(k)}
++ \sigma^2_k\frac{p}{n_k}$ \citep{Baik2006}.
+
+$\sum_i^s \hat{\lambda}^{(k)}_i \approx \sum_i^s \lambda^{(k)}_i + \sigma_k^2ps$
+
+
+\begin{figure}[!ht]
+  \centering
+    \includegraphics[width=0.5\textwidth]{Figs/lossBoxplot}
+  \caption{}
+\end{figure}
+
+\begin{figure}[!ht]
+  \centering
+    \includegraphics[width=0.75\textwidth]{Figs/evalRatios}
+  \caption{}
+\label{fig:evalRatios}
+\end{figure}
+
+\begin{figure}[!ht]
+  \centering
+    \includegraphics[width=0.5\textwidth]{Figs/posteriorRegions}
+  \caption{}
+\label{fig:posteriorRegions}
+\end{figure}
+
+\section{An Analysis of Gene Expression Data}
+
+\begin{figure}[!ht]
+  \centering
+    \includegraphics[width=0.5\textwidth]{Figs/leukemiaRatio}
+  \caption{}
+\label{fig:leukemiaRatio}
+\end{figure}
+
+\begin{figure}[!ht]
+  \centering
+    \includegraphics[width=0.5\textwidth]{Figs/leukemiaPosterior}
+  \caption{}
+\label{fig:leukemiaRatio}
+\end{figure}
+
+
+\bibliographystyle{natbib}
+\bibliography{refs.bib}
+
+\end{document}
+
