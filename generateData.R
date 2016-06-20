@@ -11,11 +11,14 @@ library(mvtnorm)
 library(rstiefel)
 source("helper.R")
 
-generateData <- function(P=200, S=10, R=S, ngroups=10, nvec=rep(100, ngroups),
+generateData <- function(P=200, S=10, R=S, Q=S-R, ngroups=10,
+                         nvec=rep(100, ngroups),
                          V=rbind(diag(S), matrix(0, nrow=P-S, ncol=S)),
-                         s2vec=rep(1, ngroups), LambdaList=NULL, Olist=NULL) {
+                         s2vec=rep(1, ngroups), LambdaList=NULL,
+                         Olist=NULL) {
 
-
+    if(Q + R != S)
+        stop("Q + R must be equal S")
 
     if( is.null(LambdaList) ) {
         LambdaList <- vector("list", ngroups)
@@ -31,21 +34,31 @@ generateData <- function(P=200, S=10, R=S, ngroups=10, nvec=rep(100, ngroups),
     
     Slist <- Ylist <- Ulist <- OmegaList <- SigmaList <- list()
 
+    if(Q > 0) {
+        Oshared <- rbind(matrix(0, nrow=(S-Q), ncol=Q), rustiefel(Q, Q))
+    } else {
+        Oshared <- matrix(ncol=0, nrow=S)
+    }
+
+    LambdaShared <- sort(rexp(Q, 1/10), decreasing=TRUE)
     for ( k in 1:ngroups ) {
 
         if( is.null(Olist[[k]]) ) {
             print(k)
             ## Generate Ok
-            Ok <- rustiefel(S, R)
+            Odiff <- rbind(rustiefel(R, R), matrix(0, nrow=S-R, ncol=R))
+            Ok <- cbind(Odiff, Oshared)
             Olist[[k]] <- Ok
         }
 
+
         if( is.null(LambdaList[[k]]) ){
-            LambdaList[[k]] <- sort(rexp(R, 1/10), decreasing=TRUE)
+            LambdaDiff <- sort(rexp(R, 1/10), decreasing=TRUE)
+            LambdaList[[k]] <- c(LambdaDiff, LambdaShared)
         }
 
         Ok <- Olist[[k]]
-        Uk <- V%*%Ok
+        Uk <- V %*% Ok
         Ulist[[k]] <- Uk
         Lamk <- LambdaList[[k]]
         OmegaList[[k]] <- Lamk/(Lamk+1)
@@ -60,8 +73,8 @@ generateData <- function(P=200, S=10, R=S, ngroups=10, nvec=rep(100, ngroups),
     }
 
     list(V=V, Slist=Slist, Ylist=Ylist, Ulist=Ulist, Olist=Olist,
-         OmegaList=OmegaList, SigmaList=SigmaList, s2vec=s2vec,
-         S=S, R=R, P=P, ngroups=ngroups, nvec=nvec)
+         OmegaList=OmegaList, LambdaList=LambdaList, SigmaList=SigmaList,
+         s2vec=s2vec, S=S, R=R, Q=Q, P=P, ngroups=ngroups, nvec=nvec)
     
 }
 
