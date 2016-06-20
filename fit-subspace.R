@@ -4,6 +4,7 @@
 fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
                         niters=100, nskip=1, init=NULL, binaryO=FALSE,
                         verbose=TRUE, sigmaTruthList=NULL, draw=c(),
+                        saveU=FALSE,
                         printLoss=FALSE,
                         Vmode="hmc") {
     
@@ -12,7 +13,10 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
     nskip <- nskip
     nsamps <- floor(niters/nskip)
 
-    Usamps <- array(dim=c(P, S, ngroups, nsamps))
+    if(saveU)
+        Usamps <- array(dim=c(P, S, ngroups, nsamps))
+    else
+        Usamps <- NULL
     Osamps <- array(dim=c(S, S, ngroups, nsamps))
     Vsamps <- array(dim=c(P, S, nsamps))
     omegaSamps <- array(dim=c(S, ngroups, ncol=nsamps))
@@ -92,13 +96,18 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
 
         ## Sample common omega
         Uk <- Ulist[[1]]
+
+        if(R < S) {
+            Omega2 <- sampleOmega(Ssum, Uk[, (R+1):S],
+                                  1, sum(nvec[k]))
         
-        Omega2 <- sampleOmega(Ssum, Uk[, (R+1):S],
-                              1, sum(nvec[k]))
-        
-        ## Sample common O
-        O2 <- sampleO(Ssum, Uk[, (R+1):S], 1, OmegaList[[k]][(R+1):S],
-                      V[, (R+1):S])
+            ## Sample common O
+            O2 <- sampleO(Ssum, Uk[, (R+1):S], 1, OmegaList[[k]][(R+1):S],
+                          V[, (R+1):S])
+        } else {
+            Omega2 <- c()
+            O2 <- matrix(nrow=0, ncol=0)
+        }
         
         for ( k in 1:ngroups ) {
             
@@ -134,8 +143,9 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
             
             ## save samples        
             if(i %% nskip==0) {
+                if(saveU)
+                    Usamps[, , k, i/nskip] <- Ulist[[k]]
 
-                Usamps[, , k, i/nskip] <- Ulist[[k]]
                 Osamps[, , k, i/nskip] <- t(V) %*% Ulist[[k]]
 
                 omegaSamps[, k, i/nskip] <- OmegaList[[k]]
