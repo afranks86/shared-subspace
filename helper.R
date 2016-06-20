@@ -1,7 +1,7 @@
-library(rstan)
 library(mvtnorm)
 library(Matrix)
 library(magrittr)
+library(scales)
 
 ## stanstart <- stan(file="vectorBMF.stan", data=list(M=9,lam=rep(1,10), gamma=rep(1, 10)), chains=1, iter=1)
 
@@ -69,13 +69,21 @@ getAgeStat <- function(normsMat) {
 
 }
 
-posteriorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups, probRegion=0.95, hline=NULL, col=NULL, pch=NULL) {
+posteriorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups, probRegion=0.95, hline=NULL, col=NULL, pch=NULL, ymax=30, plotPoints=TRUE) {
 
-
+    ngroups <- length(groups)
+    
+    if(is.null(col)){
+        col <- 1:ngroups
+    }
+    if(is.null(pch)){
+        pch=rep(19, ngroups)
+    }
+    par(mar=c(5.1, 5.1, 4.1, 2.1))
     plot(0, 0, xlim=c(-pi/2, pi/2),
-         ylim=c(0, 60), cex=0, xlab="Angle", ylab=expression(lambda[1]/lambda[2]))
-    if(!is.null(hline))
-        abline(h=hline, lty=2)
+         ylim=c(0, ymax), cex=0, xlab="Angle", ylab=expression(lambda[1]/lambda[2]), xaxt="n", cex.axis=1.5, cex.lab=1.5)
+    axis(1, at=seq(-pi/2, pi/2, by=pi/4), labels=expression(-pi/2, -pi/4, 0, pi/4, pi/2), cex.axis=1.5, cex.lab=1.5)
+
     
     
     for(g in groups) {
@@ -86,46 +94,59 @@ posteriorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups, probRegio
         pmValues <- eigPsi$values
         pmVectors <- eigPsi$vectors
         maxIndex <- which.max(pmValues)
+
         pmPoint <- pmValues[maxIndex]*pmVectors[, maxIndex]
         if(pmPoint[1] < 0)
             pmPoint <- pmPoint * c(-1, -1)
 
+        hp <- getHullPoints(nsamps, OmegaSamps[, g, ], Osamps[, , g, ])
+        pts <- hp$pts
+        hullPoints <- hp$hullPoints
 
-
-        PointsList <- lapply(1:nsamps, function(i) {
-            LambdaSamp <- OmegaSamps[, g, i]/(1-OmegaSamps[, g, i])
-            maxIndex <- which.max(LambdaSamp)
-            LambdaRatio <- LambdaSamp[maxIndex]/LambdaSamp[-maxIndex]
-            O1 <- Osamps[, maxIndex, g, i]
-            angle <- atan(O1[2]/O1[1])
-            
-            c(angle, LambdaRatio)
-            
-        })
-
-
-        
-        pts <- simplify2array(PointsList)
-        
-        numPtsToRemove <- round(nsamps*(1-probRegion))
-        while(numPtsToRemove > 0) {
-            hullPoints <- chull(pts[1, ], pts[2, ])
-            if(length(hullPoints) > numPtsToRemove) {
-                hullPoints <- sample(hullPoints, numPtsToRemove)
-                pts <- pts[, -hullPoints]
-                numPtsToRemove <- 0
-            } else{
-                pts <- pts[, -hullPoints]
-                numPtsToRemove <- numPtsToRemove - length(hullPoints)
-            }
+        if(plotPoints) {
+            points(pts[1, ], pts[2, ], col=alpha(col[g], 1/2), pch=pch[g], cex=0.5)
+        } else {
+            polygon(pts[1, hullPoints], pts[2, hullPoints], lwd=3, border=col[g], col=alpha(col[g], 1/4))
         }
-        hullPoints <- chull(pts[1, ], pts[2, ])
-        points(pts[1, ], pts[2, ], col=alpha(col[g], 1/2), pch=pch[g], cex=0.5)
-
     }
+
+    if(!is.null(hline))
+        abline(h=hline, lty=2)
+
 }
 
+getHullPoints <- function(nsamps, OmegaSamps, Osamps, probRegion=0.95) {
 
+    PointsList <- lapply(1:nsamps, function(i) {
+        LambdaSamp <- OmegaSamps[, i]/(1-OmegaSamps[, i])
+        maxIndex <- which.max(LambdaSamp)
+        LambdaRatio <- LambdaSamp[maxIndex]/LambdaSamp[-maxIndex]
+        O1 <- Osamps[, maxIndex, i]
+        angle <- atan(O1[2]/O1[1])
+        
+        c(angle, LambdaRatio)
+        
+    })
+
+    pts <- simplify2array(PointsList)
+    
+    numPtsToRemove <- round(nsamps*(1-probRegion))
+    while(numPtsToRemove > 0) {
+        hullPoints <- chull(pts[1, ], pts[2, ])
+        if(length(hullPoints) > numPtsToRemove) {
+            hullPoints <- sample(hullPoints, numPtsToRemove)
+            pts <- pts[, -hullPoints]
+            numPtsToRemove <- 0
+        } else{
+            pts <- pts[, -hullPoints]
+            numPtsToRemove <- numPtsToRemove - length(hullPoints)
+        }
+    }
+    hullPoints <- chull(pts[1, ], pts[2, ])
+
+    list(pts=pts, hullPoints=hullPoints)
+    
+}
 ##############################################################
 ### Functions for Sampling
 #############################################################
@@ -1028,10 +1049,16 @@ subspaceEM <- function(Slist, P, S, R=S, Q=0, nvec, rho1=0.1, rho2=0.9,
         ## E[ 1/sigma^2 * (psi+I)^(-1) | V]
         PhiList <- list()
         V1 <- Vstart[, 1:R]
-        V2 <- Vstart[, (R+1):S]
+        if(R < S) {
+            V2 <- Vstart[, (R+1):S]
+            Ssum <- Reduce('+', Slist)
+            PhiShared <- solve(t(V2) %*% Ssum %*% V2) * (sum(nvec) + Q +1 )
+        } else {
+            V2 <- matrix(nrow=nrow(V1), ncol=0)
+            PhiShared <- matrix(nrow=0, ncol=0)
+        }
 
-        Ssum <- Reduce('+', Slist)
-        PhiShared <- solve(t(V2) %*% Ssum %*% V2) * (sum(nvec) + Q +1 )
+
 
         for(k in 1:length(Slist)) {
             PsiK <- solve(t(V1) %*% Slist[[k]] %*% V1) * (nvec[k] + R +1 )
@@ -1057,11 +1084,15 @@ subspaceEM <- function(Slist, P, S, R=S, Q=0, nvec, rho1=0.1, rho2=0.9,
         ## E[ 1/sigma^2 * (psi+I)^(-1) | V]
         PhiList <- list()
         V1 <- Vnew[, 1:R]
-        V2 <- Vnew[, (R+1):S]
-
-        Ssum <- Reduce('+', Slist)
-        PhiShared <- solve(t(V2) %*% Ssum %*% V2) * (sum(nvec) + Q +1 )
-    
+        if(R < S) {
+            V2 <- Vnew[, (R+1):S]
+            Ssum <- Reduce('+', Slist)
+            PhiShared <- solve(t(V2) %*% Ssum %*% V2) * (sum(nvec) + Q +1 )
+        } else{
+            V2 <- matrix(nrow=nrow(V1), ncol=0)
+            PhiShared <- matrix(nrow=0, ncol=0)
+        }
+        
         for(k in 1:length(Slist)) {
             PsiK <- solve(t(V1) %*% Slist[[k]] %*% V1) * (nvec[k] + R +1 )
             PhiList[[k]] <- as.matrix(bdiag(PsiK, PhiShared))
