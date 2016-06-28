@@ -69,7 +69,7 @@ getAgeStat <- function(normsMat) {
 
 }
 
-posteriorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups, probRegion=0.95, hline=NULL, col=NULL, pch=NULL, ymax=30, plotPoints=TRUE) {
+posteriorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups, probRegion=0.95, hline=NULL, col=NULL, pch=NULL, lty=NULL, ymax=30, plotPoints=TRUE) {
 
     ngroups <- length(groups)
     
@@ -79,17 +79,20 @@ posteriorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups, probRegio
     if(is.null(pch)){
         pch=rep(19, ngroups)
     }
+    if(is.null(lty)){
+        lty=rep(1, ngroups)
+    }
     par(mar=c(5.1, 5.1, 4.1, 2.1))
     plot(0, 0, xlim=c(-pi/2, pi/2),
          ylim=c(0, ymax), cex=0, xlab="Angle", ylab=expression(lambda[1]/lambda[2]), xaxt="n", cex.axis=1.5, cex.lab=1.5)
     axis(1, at=seq(-pi/2, pi/2, by=pi/4), labels=expression(-pi/2, -pi/4, 0, pi/4, pi/2), cex.axis=1.5, cex.lab=1.5)
 
     
-    
     for(g in groups) {
 
         pmPsi <- getPostMeanPsi(Osamps[, , g , ], OmegaSamps[, g, ],
                                 s2samps[g, ], nsamps)
+        
         eigPsi <- eigen(pmPsi)
         pmValues <- eigPsi$values
         pmVectors <- eigPsi$vectors
@@ -106,7 +109,7 @@ posteriorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups, probRegio
         if(plotPoints) {
             points(pts[1, ], pts[2, ], col=alpha(col[g], 1/2), pch=pch[g], cex=0.5)
         } else {
-            polygon(pts[1, hullPoints], pts[2, hullPoints], lwd=3, border=col[g], col=alpha(col[g], 1/4))
+            polygon(pts[1, hullPoints], pts[2, hullPoints], lwd=3, border=col[g], col=alpha(col[g], 1/4), lty=lty[g])
         }
     }
 
@@ -129,6 +132,7 @@ getHullPoints <- function(nsamps, OmegaSamps, Osamps, probRegion=0.95) {
     })
 
     pts <- simplify2array(PointsList)
+    allPts <- pts
     
     numPtsToRemove <- round(nsamps*(1-probRegion))
     while(numPtsToRemove > 0) {
@@ -144,7 +148,7 @@ getHullPoints <- function(nsamps, OmegaSamps, Osamps, probRegion=0.95) {
     }
     hullPoints <- chull(pts[1, ], pts[2, ])
 
-    list(pts=pts, hullPoints=hullPoints)
+    list(allPts=allPts, pts=pts, hullPoints=hullPoints)
     
 }
 ##############################################################
