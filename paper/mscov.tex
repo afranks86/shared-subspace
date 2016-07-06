@@ -35,8 +35,10 @@
   \protect\thanks{Alexander M. Franks is a Moore/Sloan Data Science
     and WRF Innovation in Data Science Postdoctoral Fellow and a
     graduate of the Department of Statistics at Harvard University
-    (\href{mailto:amfranks@uw.edu}{amfranks@uw.edu}).  Peter Hoff is a
-    Professor of Statistics at The University of Washington
+    (\href{mailto:amfranks@uw.edu}{amfranks@uw.edu}).  Peter D. Hoff
+    is a Professor in the Departments of Statistics, Biostatistics and
+    the Center for Statistics and the Social Sciences at the
+    University of Washington
     (\href{mailto:pdhoff@uw.edu}{pdfhoff@uw.edu}).
 %
 This work was partially supported 
@@ -45,7 +47,7 @@ This work was partially supported
  The authors are grateful to Dr.\ Daniel Promislow (Department of
  Pathology, University of Washington) and Dr.\ Jessica Hoffman
  (University of Alabama at Birmingham) for sharing data and ideas
- which contributed to the framing of the ideas this paper.}}
+ which contributed to framing of this paper.}}
 \author{Alexander Franks and Peter Hoff} \date{\today}
 \maketitle 
 
@@ -63,7 +65,7 @@ This work was partially supported
 % for a variety of estimation tasks.
 
   We develop a model-based method for evaluating heterogeneity among
-  several $p\times p$ covariance matrices in the big p, small n setting.
+  several $p\times p$ covariance matrices in the big $p$, small $n$ setting.
   This is done by assuming a spiked covariance model for each group
   and sharing information about the space spanned by the group-level
   eigenvectors.  We use an empirical Bayes method to identify a low-dimensional
@@ -160,7 +162,7 @@ pattern of zeros across precision matrices.
 
 Another popular method for modeling relationships between
 high-dimensional multivariate data is partial least squares regression
-(PLS). This approach, which is a special case of a bilinear factor
+(PLS) \citep{Wold2001}. This approach, which is a special case of a bilinear factor
 model, involves projecting the data onto a lower dimensional space which
 maximizes the similarity of the two groups.  This technique does not
 require the data from each group to share the same feature set.  A
@@ -186,22 +188,23 @@ a single covariance matrix and then introduce our extension to the
 multi-group setting.  In Section \ref{sec:inference} we describe an
 empirical Bayes algorithm for inferring the shared subspace and
 estimating the posterior distribution of the covariance matrices of
-the data projected onto this subspace.  In Section
-\ref{sec:simulation} we investigate the behavior of this class of
-models in simulation and demonstrate how the shared subspace
+the data projected onto this subspace.  
+
+In Section \ref{sec:simulation} we investigate the behavior of this
+class of models in simulation and demonstrate how the shared subspace
 assumption is widely applicable, even when there is little similarity
 in the covariance matrices across groups.  In particular, shared
 subspace models include those in which there is no information shared
 across groups because in the worst case we can assume the subspace
 spanned by the group-level eigenvectors is simply the full
-$p$-dimensional space.  We then demonstrate the utility of the model
-in an analysis of gene expression data from juvenile leukemia patients
-in Section \ref{sec:app}.  Despite the large feature size ($p > 3000$)
-and small sample size ($n < 100$ per group), we identify interpretable
-similarities and differences in gene covariances on a low dimensional
-subspace.  Finally, we conclude with a brief exploration of
-heterogeneity in metabolomic data from a study on aging in the fly
-species \textit{Drosophila melanogaster}.  
+$p$-dimensional space.  In Section \ref{sec:app} we demonstrate the
+utility of a shared subspace model in an analysis of gene expression
+data from juvenile leukemia patients .  Despite the large feature size
+($p > 3000$) and small sample size ($n < 100$ per group), we identify
+interpretable similarities and differences in gene covariances on a
+low dimensional subspace.  Finally, we conclude with a brief
+exploration of heterogeneity in metabolomic data from a study on aging
+in the fly species \textit{Drosophila melanogaster}.
 
 \section{A Shared Subspace Spiked Covariance Model}
 \label{sec:shared}
@@ -227,7 +230,7 @@ studied by \citet{Johnstone2001} and others assumes that
 \end{equation}
 %
 \noindent where for $r \ll p$, $\Lambda$ is an $r\times r$ diagonal
-matrix and $U \in \mathcal V_{r,p}$.  $\mathcal V_{r,p}$ is the
+matrix and $U \in \mathcal V_{p,r}$.  $\mathcal V_{p,r}$ is the
 Stiefel manifold, which consists of the set of $p \times r$
 orthonormal matrices in $\mathbb{R}^p$, so that $U^TU =
 I$.  The spiked covariance formulation is appealing because it explicitly
@@ -279,13 +282,12 @@ covariance estimation based on $K$ matrices, $Y_1, ..., Y_K$, where
 $Y_k$ is assumed to be an $n_k$ by $p$ matrix of mean-zero normal
 data, typically with $n_k \ll p$.  Then, $Y_k^TY_k = S_k$ has a
 (degenerate) Wishart distribution as in Equation \ref{eqn:lik}.  To
-improve estimation, we seek estimators that share information across
-groups, that is, where the estimator $\hat{\Sigma}_k$ may depend on
-data from all groups.  To this end, we extend the spiked covariance
-model to grouped data, by assuming that the anisotropic variability
-from each group occurs on a common low dimensional subspace.
-Specifically, we posit that the covariance matrix for each group can
-be written as
+improve estimation, we seek estimators of each covariance matrix,
+$\hat{\Sigma}_k$, that may depend on data from all groups.  To this
+end, we extend the spiked covariance model to grouped data, by
+assuming that the anisotropic variability from each group occurs on a
+common low dimensional subspace.  Specifically, we posit that the
+covariance matrix for each group can be written as
 \begin{equation}
 \Sigma_k = V\Psi_kV^T + \sigma^2_kI,
 \label{eqn:sspsi}
@@ -389,7 +391,7 @@ estimating a low-dimensional shared subspace and the covariance
 matrices of the data projected onto this space. As we highlight in
 Section \ref{sec:simulation}, if the spiked covariance model holds for
 each group individually, then the shared subspace assumption also
-holds because at worst we can take the shared subspace ot be the full
+holds because at worst we can take the shared subspace to be the full
 $p$-dimensional space. In practice, we can usually identify a shared
 subspace of dimension $s \ll p$ that preserves most of the variation
 in the data.  Our primary objective is to identify the ``best'' shared
@@ -425,8 +427,8 @@ subspaces.
 \label{sec:em}
 
 In this section we describe a maximum marginal likelihood procedure for
-estimating the shared subspace, $VV^T$ based on the
-expectation-maximization algorithm.  The full likelihood
+estimating the shared subspace, $VV^T$, based on the
+expectation-maximization (EM) algorithm.  The full likelihood
 for the shared subspace model can be written as
 
 \begin{align}
@@ -452,15 +454,14 @@ $V$ (up to an additive constant) is
 % p(V|...) &\propto \etr(\sum_{k=1}^K[O_k\Omega_kO^T_k]V^TS_k/(2\sigma^2_k)]V)\\
 % \end{align}
 
-We propose an expectation-maximization (EM) algorithm to estimate the
-relevant quantities.  In particular we maximize the marginal
-likelihood of $V$, treating $M_k^{-1}$ and $\frac{1}{\sigma_k^2}$ as
-the ``missing'' parameters to be imputed.  We assume independent
-Jeffreys' prior distributions for both $\sigma_k^2$ and
-$M_k$.  Jeffreys' prior for these quantities corresponds to
+We maximize the marginal likelihood of $V$ with an EM algorithm, where
+$M_k^{-1}$ and $\frac{1}{\sigma_k^2}$ as the considered the
+``missing'' parameters to be imputed.  We assume independent Jeffreys'
+prior distributions for both $\sigma_k^2$ and $M_k$.  Jeffreys' prior
+for these quantities corresponds to
 $p(\sigma_k^2) \propto 1/\sigma_k^2$ and
-$p(M_k) \propto |M_k|^{-(s+1)/2}$.  From the likelihood it
-can easily be shown that the conditional posterior for $M_k$ is
+$p(M_k) \propto |M_k|^{-(s+1)/2}$.  From the likelihood it can easily
+be shown that the conditional posterior for $M_k$ is
 %
 $$p(M_k | V) \propto |M_k|^{(n_k + s + 1)/2}\etr(-1/2(M_k^{-1}V^TS_kV)) $$
 %
@@ -470,54 +471,55 @@ conditional posterior distribution of $\sigma_k^2$ is simply
 $$p\left(\sigma^2 | V\right) \propto (\sigma_k^2)^{-n_k(p-s)/2-1}\etr\left(-\frac{1}{2\sigma^2_k} (I-VV^T)S_k\right)  $$
 %
 \noindent which is an inverse-gamma($n_k(p-s)/2$,
-$\frac{1}{2}\text{tr}((I-VV^T)S_k)$) distribution.  Based on these
-results the following EM algorithm can be used:
+$\frac{1}{2}\text{tr}[(I-VV^T)S_k]$) distribution.  Based on these
+results, we complete the following steps for each iteration, $t$, of
+the EM algorithm until convergence:
 
 \begin{enumerate}
 \item For each $k$, compute relevant conditional expectations:
 \begin{enumerate}
 \item $E[M_k^{-1} | V_{(t-1)}] = n_k(V_{(t-1)}^T S_kV_{(t-1)})^{-1}$
-\item $E[\frac{1}{\sigma_k^2}|V_{(t-1)}] = \frac{n_k(p-s)}{tr((I-V_{(t-1)}V_{(t-1)}^T)S_k)}$
+\item $E[\frac{1}{\sigma_k^2}|V_{(t-1)}] = \frac{n_k(p-s)}{\text{tr}[(I-V_{(t-1)}V_{(t-1)}^T)S_k]}$
 \end{enumerate}
-\item Compute $V_{t}$ = $\underset{V}{\text{arg } \text{max}}  \sum_k tr\left(-VE[M^{-1}|V_{(t-1)}]^T +
+\item Compute $V_{t}$ = $\underset{V}{\text{arg } \text{max}}  \sum_k \text{tr}\left(-VE[M^{-1}|V_{(t-1)}]^T +
        E[\frac{1}{2\sigma_k^2}|V_{(t-1)}]VV^T\right)S_k/2)$ 
 \end{enumerate}
 
 For the second step (``M-step''), we use a numerical optimization algorithm based on
 the Cayley transform to preserve the orthogonality constraints in $V$
 \citep{Wen2013}.  Importantly, the complexity of this algorithm is
-dominated by dimension of the shared subspace, $s$, not the number of
-features $p$.  Thus, our approach is computationally efficient for
+dominated by the dimension of the shared subspace not the number of
+features.  Thus, our approach is computationally efficient for
 relatively small values of $s$, even when $p$ is large.
 
 \paragraph{Evaluating Goodness of Fit:}
 
-If $V$ is a basis for a shared subspace, then for each group $k$, most
-of the non-isotropic variation in $Y_k$ should be preserved when projecting the data
-to this space.  To characterize the extent to which this is true for
-different groups, we propose a simple estimator for the proportion of
-``signal'' variance that lies on any given subspace.  Specifically,
-for an estimated subspace $\hat{V}$, we use the following statistic
-for the ratio of the sum of the first $s$ eigenvalues of
-$\hat{V}^T \Sigma_k \hat{V}$ to the sum of the first $s$
-eigenvalues of $\Sigma_k$:
+If $V$ is a basis for a shared subspace, then for each group, most
+of the non-isotropic variation in $Y_k$ should be preserved when
+projecting the data to this space.  To characterize the extent to
+which this is true for different groups, we propose a simple estimator
+for the proportion of ``signal'' variance that lies on a given
+subspace.  Specifically, we use the following statistic for the ratio
+of the sum of the first $s$ eigenvalues of
+$V^T \Sigma_k V$ to the sum of the first $s$ eigenvalues
+of $\Sigma_k$:
 %
 \begin{equation}
-\gamma(Y_k: \hat{V}, \hat{\sigma}_k^2) = \frac{||Y_k\hat{V}||_F/n_k}{\underset{\widetilde{V} \in \mathcal{V}_{p, s}}{\text{max}}
-  ||Y_k\widetilde{V}||_F/n_k - \hat{\sigma}_k^2ps/n_k}
+\gamma(Y_k: V, \sigma_k^2) = \frac{||Y_kV||_F/n_k}{\underset{\widetilde{V} \in \mathcal{V}_{p, s}}{\text{max}}
+  ||Y_k\widetilde{V}||_F/n_k - \sigma_k^2ps/n_k}
 \label{eqn:ratio}
 \end{equation}
 %
 \noindent where $||\cdot||_F$ is the Frobenius norm. Our motivation for
 this statistic is the fact that if
-$\Sigma_k = \hat{V}\Psi_k\hat{V}^T + \sigma_k^2I$ then
-$\gamma(Y_k: \hat{V}, \hat{\sigma}_k^2) \approx 1$.  We demonstrate
+$\Sigma_k = V\Psi_kV^T + \sigma_k^2I$ then
+$\gamma(Y_k: V, \sigma_k^2) \approx 1$.  We establish
 this in an asymptotic regime where $s$ is fixed, $p$,
 $n_k \rightarrow \infty$ and $p/n_k = \alpha_k$ constant.
 
 First, since $s$ is fixed and $n_k$ is growing, the numerator,
-$||Y_k\hat{V}||_F/n_k$, is a consistent estimator for the sum of the
-eigenvalues of $\hat{V}^T\Sigma_k\hat{V}$.  The denominator,
+$||Y_kV||_F/n_k$, is a consistent estimator for the sum of the
+eigenvalues of $V^T\Sigma_kV$.  The denominator,
 $\underset{\widetilde{V} \in \mathcal{V}_{p,
     s}}{\text{max}}||Y_k\widetilde{V}||_F/n_k$
 is equivalent to the sum of the first $s$ eigenvalues of the sample
@@ -531,28 +533,36 @@ fixed
                                     \frac{\sigma_k^2\alpha_k}{\lambda^{(k)}_i
                                     - 1}\right)\\
 & \approx& \lambda^{(k)} + \sigma^2_k\frac{p}{n_k}
+\label{eqn:lamAsymp}
 \end{eqnarray}
 %
 \noindent where the approximation in the second line is due to the
-fact that $\lambda_k/(\lambda_k - 1) \approx 1$ for $\lambda_k$
-large. Thus,
+fact that $\lambda_k/(\lambda_k - 1) \approx 1$ for $\lambda_k$ large.
+Thus,
 $\sum_i^s \hat{\lambda}^{(k)}_i \approx \sum_i^s \lambda^{(k)}_i +
 \sigma_k^2ps/n_k$
-and $\underset{\widetilde{V} \in \mathcal{V}_{p, s}}{\text{max}}
-  ||Y_k\widetilde{V}||_F/n_k - \hat{\sigma}_k^2ps/n_k$ is a reasonable approximation to the sum of the
-first $s$ eigenvalues of $\Sigma_k$.
+and
+$\underset{\widetilde{V} \in \mathcal{V}_{p, s}}{\text{max}}
+||Y_k\widetilde{V}||_F/n_k - \hat{\sigma}_k^2ps/n_k$
+is a reasonable approximation to the sum of the first $s$ eigenvalues
+of $\Sigma_k$.  Alternatively, when $\lambda_k$ is small, a better
+approximation may be obtained by solving the quadratic equation
+implied by the first line of Equation \ref{eqn:lamAsymp}.
 
-As a consequence, the proposed statistic will be
-close to one for all groups when $\hat{V}\hat{V}^T = VV^T$ and smaller
-if not.  The metric can provides a useful indicator for which groups
-can be reasonably compared on a given subspace and which groups
-cannot.  When $\gamma(Y_k: \hat{V}, \hat{\sigma}_k^2)$ is small for
-some groups, it may suggest that the rank, $s$, of the inferred
-subspace needs to be larger to capture the variation in all groups. To
-demonstrate this, in Section \ref{sec:simulation}, we compute these
-statistics for inferred subspaces of different dimensions on a single
-dataset. In Section \ref{sec:app}, we plot the estimates for subspaces
-inferred with real biological data.
+As a consequence, the proposed statistic will be close to one for all
+groups when $VV^T$ is a shared subspace for the data and smaller if
+not.  The metric provides a useful indicator for which groups can be
+reasonably compared on a given subspace and which groups cannot.  In
+practice, we estimate a shared subspace, $\hat{V}$, and the isotropic
+variances, $\hat{\sigma}_k^2$, using EM and compute the plug-in
+estimate $\gamma(Y_k: \hat{V}, \hat{\sigma}_k^2)$.  When this
+statistic is small for some groups, it may suggest that the rank, $s$,
+of the inferred subspace needs to be larger to capture the variation
+in all groups. We investigate this in Section \ref{sec:simulation}, by
+computing the goodness of fit statistic for inferred subspaces of
+different dimensions on a single dataset. In Section \ref{sec:app}, we
+compute the estimates for subspaces inferred with real biological
+data.
 
 %% Problem here! Can't compare different sample sizes??
 
@@ -581,8 +591,7 @@ $\Psi_k$.  Building on recent interest in the spiked covariance model
 \citep{Donoho2013, Paul2007} we propose a tractable MCMC algorithm by
 specifying priors on the eigenvalues and eigenvectors of $\Psi_k$.  By
 modeling the eigenstructure, we can now view each covariance
-$\Sigma_k$ in terms of the original spiked principle components model
-(\ref{eqn:spiked}).  Equation \ref{eqn:sspsi}, written as a function of
+$\Sigma_k$ in terms of the original spiked principle components model.  Equation \ref{eqn:sspsi}, written as a function of
 $V$, becomes
 %
 \begin{align}
@@ -597,16 +606,16 @@ is an $r \times r$ diagonal matrix of eigenvalues, and
 $O_k \in \mathcal{V}_{s,r}$ is the matrix of eigenvectors of $\Psi_k$.
 For any individual group, this corresponds to the original spiked PCA
 model (Equation \ref{eqn:spiked}) with
-$U_k = VO_k \in \mathcal{V}_{p, r}$.  This generalization is helpful
-because it enables us to independently specify a subspace common to
-all groups and the possibly lower rank features on this space that are
-specific to individual groups.  Although our model is most useful when
-the covariance matrices are related across groups, we can also use
-this formulation to specify models for multiple unrelated spiked
-covariance models.  We explore this in detail in Section
-\ref{sec:simulation}.  In Section \ref{sec:app} we introduce a shared
-subspace model with additional structure on the eigenvectors and
-eigenvalues of $\Psi_k$ to facilitate interpretation of covariance
+$U_k = VO_k \in \mathcal{V}_{p, r}$.  Differentiating the ranks $r$
+and $s$ is helpful because it enables us to independently specify a
+subspace common to all groups and the possibly lower rank features on
+this space that are specific to individual groups.  Although our model
+is most useful when the covariance matrices are related across groups,
+we can also use this formulation to specify models for multiple
+unrelated spiked covariance models.  We explore this in detail in
+Section \ref{sec:simulation}.  In Section \ref{sec:app} we introduce a
+shared subspace model with additional structure on the eigenvectors
+and eigenvalues of $\Psi_k$ to facilitate interpretation of covariance
 heterogeneity on a two-dimensional subspace.
 
 
@@ -657,9 +666,9 @@ distributions.
 
 From Equation \ref{eqn:sslik} it is clear that the the inverse-gamma
 class of prior distributions is conjugate for $\sigma_k^2$.  We chose a
-default prior distribution for $\sigma^2$ that is equivariant with
+default prior distribution for $\sigma^2_k$ that is equivariant with
 respect to scale changes.  Specifically, we use Jeffreys' prior, an
-improper prior with density $p(\sigma^2) \propto 1/\sigma^2 $.  Under
+improper prior with density $p(\sigma^2_k) \propto 1/\sigma^2_k $.  Under
 this prior, straightforward calculations show that the full
 conditional distribution of $\sigma_k^2$ is
 inverse-gamma$( n_k p/2 , \tr[S_k( I - U_k\Omega_k
@@ -673,30 +682,29 @@ rotationally invariant uniform probability measure on
 $\mathcal V_{s,p}$.  Under this uniform prior, the full conditional
 distribution of $O_k$ has a density proportional to the
 likelihood, so
-%
 \begin{align}
 \label{lik_vo}
  p(O_k | \sigma^2_k, U_k, \Omega_k) & \propto \etr(\Omega_kO^T_kV^T[S_k/(2\sigma^2_k)]VO_k).
 \end{align}
 %
-\noindent This is a Bingham$(\Omega, \hat{V}^T S_k \hat{V}/(2\sigma^2))$
+\noindent This is a Bingham$(\Omega, V^T S_k V/(2\sigma^2))$
 distribution on $\mathcal V_{s, r}$ \citep{Khatri1977}. A
 Gibbs sampler to simulate from this distribution is given in
 \citet{Hoff2012}.  
 
 Together, the prior for $\sigma_k^2$ and $O_k$ leads to conditional
-(on $V$) Bayes estimators $\hat \Sigma(V^T S V)$ that are
+(on $V$) Bayes estimators $\hat \Sigma(V^T S_k V)$ that are
 equivariant with respect to scale changes and rotations on the
 subspace spanned by $V$, so
-that $\hat \Sigma(a W V^T S V W^T) = a W \hat\Sigma(V^T
-S V)  W$
+that $\hat \Sigma(a W V^T S_k V W^T) = a W \hat\Sigma(V^T
+S_k V)  W$
 for all $a>0$ and $ W\in \mathcal O_{s}$ (assuming an invariant
-loss function). Interestingly, if $\Omega$ were known (which it is
+loss function). Interestingly, if $\Omega_k$ were known (which it is
 not), then for a given invariant loss function the Bayes estimator
 under this prior minimizes the (frequentist) risk among all
 equivariant estimators \citep{Eaton1989}.
 
-\paragraph{Conditional distribution for $\Omega$:} Here we specify the
+\paragraph{Conditional distribution for $\Omega_k$:} Here we specify the
 conditional distribution of the diagonal matrix
 $\Omega_k = \Lambda_k(I+\Lambda_k)^{-1} = \text{diag}(\omega_{k1},
 ... \omega_{kr})$.
@@ -710,33 +718,33 @@ function, so
 p(\omega_{ki}|V, O_k, S_k) &\propto_{\omega_{ki}}
   \left(\prod_{i=1}^r(1-\omega_{ki})^{n_k/2}  \right)
   \etr(\frac{1}{2\sigma_k^2}(VO_k\Omega_kO_k^TV^T)S_k) \\
-&  \propto  (1-\omega_{ki})^{n/2} e^{c \omega_s  n/2},    
+&  \propto  (1-\omega_{ki})^{n/2} e^{c_{ki} \omega_{ki}  n/2},    
 \label{eqn:wpost}
 \end{align}
 %
-\noindent where $c = u_{ki}^T S_k u_{ki}/(n \sigma^2)$ and $ u_{ki}$ is
+\noindent where $c_{ki} = u_{ki}^T S_k u_{ki}/(n_k \sigma^2_k)$ and $ u_{ki}$ is
 column $i$ of $U_k = VO_k$.  While not proportional to a density
 belonging to a standard class of distributions, we can sample from the
 corresponding univariate distribution numerically.  The behavior of
-this distribution is straightforward to understand: if $c\leq 1$, then
-the the function has a maximum at $\omega_i =0$, and decays
-monotonically to zero as $\omega \rightarrow 1$.  If $c>1$ then the
-function is uniquely maximized at $(c-1)/c \in (0,1)$.  To see why
+this distribution is straightforward to understand: if $c_{ki}\leq 1$, then
+the the function has a maximum at $\omega_{ki} =0$, and decays
+monotonically to zero as $\omega_{ki} \rightarrow 1$.  If $c_{ki}>1$ then the
+function is uniquely maximized at $(c_{ki}-1)/c_{ki} \in (0,1)$.  To see why
 this makes sense, note that the likelihood is maximized when the
 columns of $ U_k$ are equal to the eigenvectors of $S_k$
 corresponding to its top $r$ eigenvalues
-\citep{Tipping1999}. At this value of $U_k$, $c$ will then
-equal one of the top $r$ eigenvalues of $ S_k/(n\sigma_k^2)$.  In the
-case that $n\gg p$, we expect
+\citep{Tipping1999}. At this value of $U_k$, $c_{ki}$ will then
+equal one of the top $r$ eigenvalues of $ S_k/(n_k\sigma_k^2)$.  In the
+case that $n_k\gg p$, we expect
 $ S_k/(n_k\sigma_k^2)\approx \Sigma_k/\sigma_k^2$, the true (scaled)
-population covariance, and so we expect $c$ to be near one of the top
-$r$ eigenvalues of $\Sigma_0/\sigma^2$, say $\lambda_0+1$.  If indeed
-$\Sigma_k$ has $r$ spikes, then $\lambda_k>0$,
-$c \approx \lambda_0 +1 > 1$, and so the conditional mode of $w_i$ is
-approximately $(c-1)/c = \lambda_i/(\lambda_i+1)$, the correct value.
+population covariance, and so we expect $c_{ki}$ to be near one of the top
+$r$ eigenvalues of $\Sigma_k/\sigma^2_k$, say $\lambda_{ki}+1$.  If indeed
+$\Sigma_k$ has $r$ spikes, then $\lambda_{ki}>0$,
+$c_{ki} \approx \lambda_{ki} +1 > 1$, and so the conditional mode of $w_{ki}$ is
+approximately $(c_{ki}-1)/c_{ki} = \lambda_{ki}/(\lambda_{ki}+1)$, the correct value.
 On the other hand, if we have assumed the existence of a spike when
-there is none, then $\lambda_0=0$, $c\approx 1$ and the Bayes estimate
-of $w_i$ will be shrunk towards zero, as it should be.
+there is none, then $\lambda_{ki}=0$, $c_{ki}\approx 1$ and the Bayes estimate
+of $w_{ki}$ will be shrunk towards zero, as it should be.
 
 
 
@@ -789,10 +797,9 @@ covariance matrices on a low dimensional subspace. Here, we simulate
 $K=5$ groups of data from the shared subspace spiked covariance
 model with $p=200$, $s=r=2$, $\sigma_k^2=1$, and
 $n_k=50$.  We fix the first eigenvalue of $\Psi_k$ from each group to
-$\lambda_1=100$ and vary $\lambda_2$ so that $\lambda_1/\lambda_2$ is
-either $10$, $3$ or $1$.  For this two dimensional shared subspace
+$\lambda_1=100$ and vary $\lambda_2$.  For this two dimensional shared subspace
 model we summarize $\Psi_k$ in terms of its eigendecomposition by
-computing posterior distributions for the log eigenvalue ratio
+computing posterior distributions for the log eigenvalue ratio,
 $\text{log}(\frac{\lambda_1}{\lambda_2})$, with $\lambda_1 > \lambda_2$, and the
 angle of the first eigenvector on this subspace,
 $\text{arctan}(\frac{O_{12}}{O_{21}})$, relative to the first column
@@ -800,14 +807,15 @@ of $V$.
 
 Figure \ref{fig:simPosterior} depicts the 95\% posterior regions for
 these quantities from a single simulation.  Dots correspond to the
-true log ratios and orientations of $\hat{V}^T\Sigma_k\hat{V}$. To compute
-these regions, we iteratively remove posterior samples corresponding to the
+true log ratios and orientations of $\hat{V}^T\Sigma_k\hat{V}$, where
+$\hat{V}$ is the maximum marginal likelihood for $V$. To compute
+the posterior regions, we iteratively remove posterior samples corresponding to the
 vertices of the convex hull until only 95\% of the original samples
 remain.  Non-overlapping posterior regions imply that differences in
 the covariances are statistically significant between groups.  In this
 example, the ratio of the eigenvalues of the true covariance matrices
 were $10$ (black and red groups), $3$ (green and blue groups) and $1$
-(cyan group).  Larger values of the eigenvalue ratio correspond to more
+(cyan group).  Larger eigenvalue ratios correspond to more
 correlated contours and a value of $1$ implies isotropic covariance.
 Note that for the smaller eigenvalue ratio of $3$, there is larger
 uncertainty about the orientation of the primary axis.  When the ratio
@@ -831,10 +839,10 @@ are spherical.
     % \end{subfigure}
     \caption{a) 95\% posterior regions for the log of the ratio of
       eigenvalues, $\text{log}(\frac{\lambda_1}{\lambda_2})$, of $\Psi_k$ and the
-      orientation of the principle axis on space spanned by $\hat{V}$
-      cover the truth.  Dots correspond to true data generating
+      orientation of the principle axis on the space spanned by $\hat{V}$
+      cover the truth in this simulation.  Dots correspond to true data generating
       parameter values on $\hat{V}^T\Sigma_k\hat{V}$ .  Since $V$
-      is only identifiable up to rotation, for this plot we find the Procrustes
+      is only identifiable up to rotation, for this figure we find the Procrustes
       rotation that maximizes the similarity of $\hat{V}$ to the true
       data generating basis. True eigenvalue ratios were 10 (red and
       black), 3 (green and blue) and 1 (light blue).  True
@@ -855,9 +863,9 @@ $\lambda_1/\lambda_2 = 3$ the frequentist coverage was close to
 nominal at approximately 0.94.  For the groups with
 $\lambda_1/\lambda_2 = 10$ the coverage was approximately 0.92.  We
 did not evaluate the coverage for the group with
-$\lambda_1/\lambda_2 = 1$ since this value is on the edge of the
-parameter space and would not be covered by the 95\% posterior regions
-as constructed.  The slight under coverage is likely due to the fact
+$\lambda_1/\lambda_2 = 1$ (cyan) since this value is on the edge of the
+parameter space and is not be covered by the 95\% posterior regions
+as constructed.  The slight under coverage for the other groups is likely due to the fact
 that we infer $VV^T$ using maximum marginal likelihood, and thus
 ignore the extra variability due to the uncertainty about the shared
 subspace estimate.
@@ -881,11 +889,10 @@ subspace estimate.
         \caption{$\hat{s}$ = 20}
         \label{fig:ratio-s20}
     \end{subfigure}
-    \caption{a) Stein's risk as a function of the dimension of the
+    \caption{a) Stein's risk as a function of the
       shared subspace dimension.  Data from ten groups, with $U_k$
       generated uniformly on the Stiefel manifold
-      $\mathcal{V}_{200, 2}$.  As the shared subspace dimension
-      increases, $\hat{s} \rightarrow p$, the risk converges to the
+      $\mathcal{V}_{200, 2}$.  As $\hat{s} \rightarrow p$, the risk converges to the
       risk from independently estimated spiked covariance matrices
       (dashed blue line).  The data also fit a shared subspace model
       with $s=rK$.  If $VV^T = \text{span}(U_1, ..., U_k)$ were known
@@ -920,12 +927,12 @@ estimate using MCMC samples.
 
 We start by investigating the behavior of our model when we
 underestimate the true dimension of the shared subspace.  In this
-simulation, we generate data $K=10$ groups of mean-zero normally
+simulation, we generate $K=10$ groups of mean-zero normally
 distributed data with $p=200$, $r=2$, $s=p$ and $\sigma_k^2=1$.  We
-fix the eigenvalues for covariance matrix to
+fix the eigenvalues of $\Psi_k$ to
 ($\lambda_1, \lambda_2) = (250, 25)$.  Although the signal variance
 from each group individually is preserved on a two dimensional
-subspace, these subspaces are not similar across groups-- the
+subspace, these subspaces are not similar across groups since the
 eigenvectors from each group are generated uniformly from the Stiefel
 manifold, $U_k \in \mathcal{V}_{p, r}$.
 
@@ -934,68 +941,64 @@ performs when we fit the data using a shared subspace model of
 dimension $\hat{s} < s$.  In Figure \ref{fig:sdimension} we plot
 Stein's risk as a function of $\hat{s}$, estimating the risk
 empirically using ten independent simulations per value of $\hat{s}$.
-The dashed blue line corresponds to the multi-group Stein's risk for
-covariance matrices estimated independently.  Independent covariance
-estimation is equivalent to shared subspace inference with
-$\hat{s} = p$ because this implies $VV^T = I_p$.  Although the risk is
-large for small values of $\hat{s}$, as the shared subspace dimension
-increases to the dimension of the feature space,
-$\hat{s} \rightarrow p$, the risk for the shared subspace estimator
-quickly decreases.  Importantly, it is always true that
-rank($[U_1, ..., U_K]) \leq rK$ so it can equivalently be assumed that
-the data were generated from a shared subspace model with dimension
-$s = rK < p$.  As such, even when there is little similarity between the
-eigenvectors from each group, the shared subspace estimator with
-$\hat{s} = rK$ will perform well, provided that we can identify a
-subspace, $\hat{V}\hat{V}^T$, that is close to
-$\text{span}([U_1, ..., U_K])$. When
-$\hat{V}\hat{V}^T = \text{span}([U_1, ..., U_K])$ exactly,
-(\ref{fig:sdimension}, dashed red line),
-shared subspace estimation outperforms independent covariance
-estimation.
+The dashed blue line corresponds to Stein's risk for covariance
+matrices estimated independently.  Independent covariance estimation
+is equivalent to shared subspace inference with $\hat{s} = p$ because
+this implies $VV^T = I_p$.  Although the risk is large for small
+values of $\hat{s}$, as the shared subspace dimension increases to the
+dimension of the feature space, that is $\hat{s} \rightarrow p$, the
+risk for the shared subspace estimator quickly decreases.
+Importantly, it is always true that rank($[U_1, ..., U_K]) \leq rK$ so
+it can equivalently be assumed that the data were generated from a
+shared subspace model with dimension $s = rK < p$.  As such, even when
+there is little similarity between the eigenvectors from each group,
+the shared subspace estimator with $\hat{s} = rK$ will perform well,
+provided that we can identify a subspace, $\hat{V}\hat{V}^T$, that is
+close to $\text{span}([U_1, ..., U_K])$. When
+$\hat{V}\hat{V}^T = \text{span}([U_1, ..., U_K])$ exactly, shared
+subspace estimation outperforms independent covariance estimation
+(\ref{fig:sdimension}, dashed red line).
 
 From this simulation, it is clear that correctly specifying the
 dimension of the shared subspace is important for efficient covariance
 estimation.  When the dimension of the shared subspace is too small,
 we accrue higher risk.  The goodness of fit statistic,
 $\gamma(Y_k: \hat{V}, \hat{\sigma_k}^2)$, can be used to identify when
-a larger shared subspace is warranted.  When $\hat{s}$ is too small
-(e.g. Figure \ref{fig:ratio-s5}),
+a larger shared subspace is warranted.  When $\hat{s}$ is too small,
 $\gamma(Y_k: \hat{V}, \hat{\sigma_k}^2)$ will be significantly smaller
-than one for at least some of the groups, regardless of $\hat{V}$.
-When $\hat{s}$ is large enough, we are able to use maximum marginal
-likelihood to identify a shared subspace which preserves most of the
-variation in the data for all groups (Figure \ref{fig:ratio-s20}).
-Thus, for a given $\hat{V}\hat{V}^T$, the goodness of fit statistic
-can be used to identify the groups that can be fairly compared on this
-subspace and whether we would benefit from fitting a model with a
-larger value of $\hat{s}$.
+than one for at least some of the groups, regardless of $\hat{V}$
+(e.g. Figure \ref{fig:ratio-s5}).  When $\hat{s}$ is large enough, we
+are able to use maximum marginal likelihood to identify a shared
+subspace which preserves most of the variation in the data for all
+groups (Figure \ref{fig:ratio-s20}).  Thus, for any estimated
+subspace, the goodness of fit statistic can be used to identify the
+groups that can be fairly compared on this subspace and whether we
+would benefit from fitting a model with a larger value of $\hat{s}$.
 
 \paragraph{Model Comparison and Rank Estimation:}
 
-It is apparent that correct specification for the rank of the shared
-subspace is important for efficient inference.  So far in this
-section, we have assumed that the group rank, $r$, and shared subspace
-dimension, $s$, are fixed and known.  In practice this is not the
-case.  Prior to fitting a model we should estimate these quantities.
+Clearly, correct specification for the rank of the shared subspace is
+important for efficient inference.  So far in this section, we have
+assumed that the group rank, $r$, and shared subspace dimension, $s$,
+are fixed and known.  In practice this is not the case.  Prior to
+fitting a model we should estimate these quantities.
 \citet{Gavish2014} provide an asymptotically optimal (in mean squared
 error) singular value threshold for low rank matrix recovery with
 noisy data.  We use their rank estimator, which is a function of the
 median singular value of the data matrix and the ratio
-$\alpha_k =\frac{p}{n_k}$, to estimate the rank, $r$, of a spiked
-covariance matrix.  Although their estimator was derived for
-individual covariance estimation, we found that, Gavish and Donoho's
-estimator can also be applied to the pooled data to estimate the
-shared subspace dimension, $s$.  Specifically, we concatenate the data
-from all groups to create an $(\sum_k n_k) \times p$ dimensional
-matrix and apply their rank estimator to this matrix to choose $s$.
+$\alpha_k =\frac{p}{n_k}$, to estimate $r$.  Although their estimator
+was derived for individual covariance estimation, we found that,
+Gavish and Donoho's estimator can also be applied to the pooled data
+to estimate $s$.  Specifically, we concatenate the data from all
+groups to create an $(\sum_k n_k) \times p$ dimensional matrix and
+apply their rank estimator to this matrix to choose $s$.
 
 Using these rank estimators, we conduct a simulation which
 demonstrates the relative performance of shared subspace group
 covariance estimation under different data generating models.  In
 these simulations we assume the data have $p=200$ features, $r=2$
-spikes, $\sigma^2_k=1$, and $n_k = 50$.  We fix the eigenvalues of
-$\Psi_k$, $(\lambda_1, \lambda_2) = (250, 25)$.  We consider three
+spikes, $\sigma^2_k=1$, and $n_k = 50$.  We fix the non-zero eigenvalues of
+$\Psi_k$ to $(\lambda_1, \lambda_2) = (250, 25)$.  We consider three
 different shared subspace data models: 1) a low dimensional shared
 subspace model with $s=r=2$; 2) a model in which the spiked covariance
 matrices from all groups are identical, e.g.
@@ -1004,17 +1007,16 @@ shared subspace model with $s=p=200$.  We simulate 100 independent
 datasets for each of these data generating mechanisms.
 
 We fit these datasets using three different variants of the shared
-subspace model.  For each of these fits we estimate the number of
-spikes, $r$, from the data.  First, we estimate a single spiked
-covariance matrix from the pooled data and let
-$\hat{\Sigma}_k = \hat{\Sigma}$.  Second, we fit the full rank shared
-subspace model in which we independently estimate each spiked
-covariance matrix (since $s=p$ implies $VV^T = I_p$).  Finally, we use
-an ``adaptive'' shared subspace estimator, in which we estimate both
-$s$ and $r$ and apply empirical Bayes inference for $VV^T$.  In Table
+subspace model.  For each of these fits we estimate $r$.  First, we
+estimate a single spiked covariance matrix from the pooled data and
+let $\hat{\Sigma}_k = \hat{\Sigma}$.  Second, we fit the full rank
+shared subspace model.  This corresponds to a procedure in which we
+estimate each spiked covariance matrix independently, since $s=p$
+implies $VV^T = I_p$.  Finally, we use an ``adaptive'' shared subspace
+estimator, in which we estimate both $s$, $r$ and $VV^T$.  In Table
 \ref{table:groupLoss} we report the average Stein's risk and
 corresponding 95\% loss intervals for the estimates derived from each
-inferential model.
+of these inferential models.
 
 \begin{table}
 \begin{center}
@@ -1030,17 +1032,18 @@ inferential model.
   \caption[Table caption text]{Stein's risk (and 95\% loss intervals)
     for different inferential models and data generating models with
     varying degrees of between-group covariance similarity.  For each
-    of $K=10$ groups, we simulate from spiked covariance models with
-    $p=200$, $r=2$, $\sigma_k^2=1$ and $n_k=50$.  We fit the data to
-    a shared subspace model in which $s$, $r$ and $VV^T$ are all
-    estimated from the data (``adaptive''), a spiked covariance model
-    in which the covariance matrices from each group are assumed to be
-    identical ($\hat{\Sigma}_k=\hat{\Sigma}$) and a model in which we
-    assume the data do \emph{not} share a lower dimensional subspace
-    across groups ($\hat{s} = p$). The estimators which most closely
-    match the data generating model have the lowest risk (diagonal)
-    but the adaptive estimator performs well relative to the
-    alternative misspecified model.}
+    of $K=10$ groups, we simulate data from three different types of
+    shared subspace models.  For each of these models, $p=200$, $r=2$,
+    $\sigma_k^2=1$ and $n_k=50$.  We also fit the data using three
+    different shared subspace models: a model in which $s$, $r$ and
+    $VV^T$ are all estimated from the data (``adaptive''), a spiked
+    covariance model in which the covariance matrices from each group
+    are assumed to be identical ($\hat{\Sigma}_k=\hat{\Sigma}$) and a
+    model in which we assume the data do \emph{not} share a lower
+    dimensional subspace across groups (i.e. $\hat{s} = p$). The estimators
+    which most closely match the data generating model have the lowest
+    risk (diagonal) but the adaptive estimator performs well relative
+    to the alternative misspecified model.}
 \label{table:groupLoss}
 \end{center}
 \end{table}
@@ -1051,8 +1054,8 @@ specifications. However, the adaptive estimator has small risk under
 model misspecification relative to the alternatives.  For example,
 when $\Sigma_k = \Sigma$, the adaptive shared subspace estimator has
 almost four times smaller risk than the full rank estimator, in which
-each covariance matrix is estimated independently.  When we generated
-data from a model with $s=p$, that is, the eigenvectors of $\Psi_k$
+each covariance matrix is estimated independently.  When the
+data come from a model in which $s=p$, that is, the eigenvectors of $\Psi_k$
 are generated uniformly from $\mathcal{V}_{p,r}$, the adaptive
 estimator is over an order of magnitude better than the estimator
 which assumes no differences between groups.  These results suggest
@@ -1060,7 +1063,7 @@ that empirical Bayes inference for $VV^T$ combined with the rank
 estimation procedure suggested by \citet{Gavish2014} can be widely
 applied to group covariance estimation because the estimator adapts to
 the amount of similarity across groups.  Thus, shared subspace estimation
-can be especially appropriate choice when the similarity between
+can be an especially appropriate choice when the similarity between
 groups is not known a priori.  % In the simulations
 % used to create Table \ref{table:groupLoss}, we typically estimated $s$
 % to be smaller than $rK$ for the data generated under ``full rank''
@@ -1089,10 +1092,10 @@ groups is not known a priori.  % In the simulations
 \section{Analysis of Biological Data}
 \label{sec:app}
 
-In this Section we apply a shared subspace spiked covariance model to data in two
+In this Section we apply shared subspace spiked covariance models to data in two
 different biological examples.  In the first, we compare gene
 expression data from juveniles with different subtypes of leukemia.  Even
-after removing mean effects, the data indicate significant differences
+after removing mean effects, our results indicate significant differences
 in covariance matrices between groups.  In the second example, we
 compare covariance matrices in a metabolomic analysis of \textit{Drosophila} data.  In
 this example, after controlling for mean effects due to fly age, gender and
@@ -1139,7 +1142,7 @@ expression levels in young adults with different subtypes of pediatric
 acute lymphoblastic leukemia \citep{Yeoh2002}.  The raw data consists
 of gene expression levels for thousands of genes in seven different
 subtypes of leukemia: BCR-ABL, E2A-PBX1, Hyperdip50, MLL, T-ALL,
-TEL-AML1 and a seventh group for unidentified subtypes.  The groups
+TEL-AML1 and a seventh group for unidentified subtypes (``Others'').  The groups
 have corresponding sample sizes of $n = (15, 27, 64, 20, 43, 79, 79)$.
 Although there are over 12,000 genes in the dataset, the vast majority of expression
 levels are missing.  Thus, we restrict our attention to the genes for
@@ -1152,11 +1155,11 @@ the rows and columns of the gene expression levels in each group.
 In Figure \ref{fig:leukemia} we plot the results of our analysis.
 Panel \ref{fig:leukemiaRatio} shows that over $60\%$ of the variance
 can be explained by the  shared subspace for all
-groups, with 4 of the 6 groups over 80\%.  Panel
+groups, with over 80\% of the variance explained in  4 of the 6 groups.  Panel
 \ref{fig:leukemiaPosterior} reflects some significant differences in
 the posterior distribution of eigenvalues and eigenvectors between
 groups.  The $x$-axis corresponds to the orientation of the principle
-axis of $\Psi_k$ on $V$ and the $y$-axis corresponds to the log ratio of
+axis of $\Psi_k$ on $\hat{V}_1$ and the $y$-axis corresponds to the log ratio of
 the first two eigenvalues.  Several groups have significantly
 different orientations for the first principle component of the
 projected covariance matrix, as well as differences in the ratio of
@@ -1175,7 +1178,7 @@ Further intuition about the differences in covariances between groups
 can be understood in the biplot in Figure \ref{fig:leukemiaBiplot}.
 Here, we plot the contours of the covariance matrices for three
 leukemia subtypes. The 1\% of genes with the largest loadings on the
-first two columns of $\hat{V}$ are indicated with black shapes and the
+first two columns of $\hat{V}_1$ are indicated with black shapes and the
 remaining loadings with light grey dots.  The genes with the largest
 loadings are clustered by quadrant and listed in the corresponding
 table.  Even though we remove all mean-level differences in gene
@@ -1212,9 +1215,9 @@ cancers \citep{Dang2012}.
 \end{figure}
 
 In this figure, genes that fall in the upper right quadrant have
-positive loadings in both columns of $\hat{V}$. Genes in the upper left
-corner of the figure have positive loadings on the first column of $\hat{V}$
-but negative loadings on the second column of $\hat{V}$.  The principle axis
+positive loadings in both columns of $\hat{V}_1$. Genes in the upper left
+corner of the figure have positive loadings on the first column of $\hat{V}_1$
+but negative loadings on the second column of $\hat{V}_1$.  The principle axis
 for a group aligns in the direction of genes that exhibit the largest
 variability in that group.  Genes which lie in a direction orthogonal
 to the principle axis exhibit reduced variability, relative to the
@@ -1223,12 +1226,12 @@ plot (triangles) exhibit large, positively correlated variability in
 the Hyperdip50 group.  In this same group, there is reduced
 variability, relative to the other groups, among the genes in the
 upper right corner of the plot (squares), since this cluster of genes lie in
-a direction orthogonal to the principle axis.  In contrast, the
-BCR-ABL group is aligned primarily with the second column of $\hat{V}$,
+a direction nearly orthogonal to the principle axis.  In contrast, the
+BCR-ABL group is aligned primarily with the second column of $\hat{V}_1$,
 which means that the genes indicated by squares and circles vary
 significantly in this group.  Genes in the square group are
 anti-correlated with those in the circle group, since their
-loadings have opposite signs on the second column of $\hat{V}$.
+loadings have opposite signs on the second column of $\hat{V}_1$.
 
 
   \begin{figure}[!ht]
@@ -1251,7 +1254,7 @@ loadings have opposite signs on the second column of $\hat{V}$.
 
 \paragraph{Analysis of Metabolomic Data:}
 
-Next, we briefly discuss an example in which we could not identify
+Next, we briefly discuss an example in which we could not readily identify
 significant covariance differences between groups.  Here, we apply
 shared subspace group covariance estimation to a metabolomic data
 analysis on fly aging \citep{Hoffman2014}.  We bin the data to include
@@ -1307,8 +1310,7 @@ covariance matrices can both be useful summaries of the data.  For
 example, with the biological data, the shared subspace highlights the
 full set of genes or metabolites that are correlated across group.
 Differences between group covariance matrices can be understood in
-terms of differences in these sets of correlated and
-molecules.  In the applied analysis, we demonstrated how
+terms of differences in these sets of correlated molecules.  In the applied analysis, we demonstrated how
 we can use these notions to visualize and contrast the posterior
 distributions of covariance matrices projected onto a particular
 subspace.
@@ -1326,22 +1328,22 @@ warranted.  Improved rank estimators would further improve the
 performance of the adaptive shared subspace estimator discussed in
 Section \ref{sec:simulation}.
 
-It is also a challenging problem to estimate the ``best'' subspace,
-$VV^T$, once the rank of the space is specified.  We used maximum
-marginal likelihood to estimate the shared subspace $VV^T$ and then
-use MCMC to infer $\Psi_k$.  By focusing on
-group differences for $\Psi_k$ on a \emph{fixed} subspace, it is much
-simpler to interpret similarities and differences.  Nevertheless, full
-uncertainty quantification for $VV^T$ can be desirable.  We found
-MCMC inference for $VV^T$ to be challenging for the problems considered
-in this paper and leave it for future work to develop an efficient
-fully Bayesian approach for estimating the joint posterior of $VV^T$ and $\Psi_k$.
-Recently developed Markov chain Monte Carlo algorithms, like Riemmanian manifold
-Hamilton Monte Carlo, which can exploit the geometry of the Grassmann
-manifold, may be useful here \citep{Byrne2013, Girolami2011}.  It may
-also be possible, though computationally intensive, to jointly
-estimate the $s$ and $VV^T$ using for instance, a
-reversible-jump MCMC algorithm.
+It is also a challenging problem to estimate the ``best'' subspace
+once the rank of the space is specified.  We used maximum marginal
+likelihood to estimate $VV^T$ and then use MCMC to
+infer $\Psi_k$.  By focusing on group differences for $\Psi_k$ on a
+\emph{fixed} subspace, it is much simpler to interpret similarities
+and differences.  Nevertheless, full uncertainty quantification for
+$VV^T$ can be desirable.  We found MCMC inference for $VV^T$ to be
+challenging for the problems considered in this paper and leave it for
+future work to develop an efficient fully Bayesian approach for
+estimating the joint posterior of $VV^T$ and $\Psi_k$.  Recently
+developed Markov chain Monte Carlo algorithms, like Riemmanian
+manifold Hamilton Monte Carlo, which can exploit the geometry of the
+Grassmann manifold, may be useful here \citep{Byrne2013,
+  Girolami2011}.  It may also be possible, though computationally
+intensive, to jointly estimate the $s$ and $VV^T$ using for instance,
+a reversible-jump MCMC algorithm.
 
 % There are many different prior specifications for $\Psi_k$ and
 % $\sigma_k^2$ that we could consider for estimating posterior
@@ -1365,7 +1367,7 @@ with existing approaches for multi-group covariance
 estimation.  In particular, we can incorporate additional shrinkage on
 the projected covariance matrices $\Psi_k$.  As in \citet{Hoff2009} we
 can employ non-uniform Bingham prior distributions for the
-eigenvectors of $\Psi_k$ or model $\Psi_k$ as a function of continuous
+eigenvectors of $\Psi_k$ or we can model $\Psi_k$ as a function of continuous
 covariates as in \citet{Yin2010} and \citet{Hoff2011}.  Alternatively, we can
 summarize the estimated covariance matrices by thresholding entries of
 the precision matrix, $\Psi_k^{-1}$ to visualize differences between
