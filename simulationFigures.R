@@ -1,5 +1,5 @@
 load("SdimLoss.Rdata")
-pdf("paper/Figs/LossVsDimension.pdf")
+pdf("paper/Figs/LossVsDimension.pdf", font="Times")
 par(mar=c(5.1, 5.1, 4.1, 2.1))
 plot(5:50, lossLst, type="l", lwd=3, ylim=c(0, 100), xlim=c(0, 50), ylab="Stein's Risk", xlab=expression(hat(s)), cex.axis=2, cex.lab=2)
 grid()
@@ -13,7 +13,7 @@ legend("topright", lty=2, lwd=3, col=c("blue", "red"),
                 bty='n', cex=2)
 dev.off()
 
-pdf(sprintf("paper/Figs/simRatio-s5.pdf", format(Sys.Date(), "%m-%d")))
+pdf(sprintf("paper/Figs/simRatio-s5.pdf", format(Sys.Date(), "%m-%d")), font="Times")
 load("sdimtest-5-1.RData")
 evalRatios <- with(resList[[1]],
     sapply(1:ngroups, function(k) {
@@ -23,14 +23,14 @@ evalRatios <- with(resList[[1]],
     (numer/denom) / correction
     }))
 
-par(mar=c(7.1, 4.5, 4.1, 2.1))
+par(mar=c(5.1, 4.5, 4.1, 2.1))
 barplot(evalRatios, ylim=c(0, 1), xlab="Group", ylab="Goodness of Fit", main="",
-        space=0.2, cex.axis=1.5, col="#646464", col.axis="#646464",
+        space=0.2, cex.axis=2, col="#646464", col.axis="black",
         col.main="#646464", border=NA,
-        names.arg=1:10, cex.names=2, cex.main=2, cex.lab=2, col.lab="#646464")
+        names.arg=1:10, cex.names=2, cex.main=1, cex.lab=2, col.lab="black")
 dev.off()
 
-pdf(sprintf("paper/Figs/simRatio-s20.pdf", format(Sys.Date(), "%m-%d")))
+pdf(sprintf("paper/Figs/simRatio-s20.pdf", format(Sys.Date(), "%m-%d")), font="Times")
 load("sdimtest-20-1.RData")
 evalRatios <- with(resList[[1]],
     sapply(1:ngroups, function(k) {
@@ -40,8 +40,8 @@ evalRatios <- with(resList[[1]],
     (numer/denom) / correction
     }))
 
-par(mar=c(7.1, 4.5, 4.1, 2.1))
-barplot(evalRatios, ylim=c(0, 1), xlab="Group", ylab="Goodness of Fit", space=0.2, cex.axis=1.5, col="#646464", col.axis="#646464", col.lab="#646464", border=NA,
+par(mar=c(5.1, 4.5, 4.1, 2.1))
+barplot(evalRatios, ylim=c(0, 1), xlab="Group", ylab="Goodness of Fit", space=0.2, cex.axis=2, col="#646464", col.axis="black", col.lab="black", border=NA,
         names.arg=1:10, cex.names=2, cex.lab=2)
 dev.off()
 
