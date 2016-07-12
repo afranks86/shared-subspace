@@ -69,7 +69,10 @@ getAgeStat <- function(normsMat) {
 
 }
 
-posteriorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups, probRegion=0.95, hline=NULL, col=NULL, pch=NULL, lty=NULL, ymax=30, plotPoints=TRUE) {
+posteriorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups,
+                          probRegion=0.95, hline=NULL, col=NULL,
+                          pch=NULL, lty=NULL, ymax=30, logRatio=FALSE,
+                          plotPoints=TRUE, cex.axis=1.5) {
 
     ngroups <- length(groups)
     
@@ -83,9 +86,12 @@ posteriorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups, probRegio
         lty=rep(1, ngroups)
     }
     par(mar=c(5.1, 5.1, 4.1, 2.1))
+    ylab <- ifelse(logRatio,
+                   expression("log(" ~ lambda[1]/lambda[2] ~ ")"),
+                   expression(lambda[1]/lambda[2]))
     plot(0, 0, xlim=c(-pi/2, pi/2),
-         ylim=c(0, ymax), cex=0, xlab="Angle", ylab=expression(lambda[1]/lambda[2]), xaxt="n", cex.axis=1.5, cex.lab=1.5)
-    axis(1, at=seq(-pi/2, pi/2, by=pi/4), labels=expression(-pi/2, -pi/4, 0, pi/4, pi/2), cex.axis=1.5, cex.lab=1.5)
+         ylim=c(0, ymax), cex=0, xlab="Angle", ylab=ylab, xaxt="n", cex.axis=cex.axis, cex.lab=1.5)
+    axis(1, at=seq(-pi/2, pi/2, by=pi/4), labels=expression(-pi/2, -pi/4, 0, pi/4, pi/2), cex.axis=cex.axis, cex.lab=1.5)
 
     
     for(g in groups) {
@@ -102,9 +108,12 @@ posteriorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups, probRegio
         if(pmPoint[1] < 0)
             pmPoint <- pmPoint * c(-1, -1)
 
-        hp <- getHullPoints(nsamps, OmegaSamps[, g, ], Osamps[, , g, ])
+        hp <- getHullPoints(nsamps, OmegaSamps[, g, ], Osamps[, , g, ],
+                            logRatio=logRatio)
         pts <- hp$pts
         hullPoints <- hp$hullPoints
+
+
 
         if(plotPoints) {
             points(pts[1, ], pts[2, ], col=alpha(col[g], 1/2), pch=pch[g], cex=0.5)
@@ -118,7 +127,8 @@ posteriorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups, probRegio
 
 }
 
-getHullPoints <- function(nsamps, OmegaSamps, Osamps, probRegion=0.95) {
+getHullPoints <- function(nsamps, OmegaSamps, Osamps, logRatio=FALSE,
+                          probRegion=0.95) {
 
     PointsList <- lapply(1:nsamps, function(i) {
         LambdaSamp <- OmegaSamps[, i]/(1-OmegaSamps[, i])
@@ -133,6 +143,10 @@ getHullPoints <- function(nsamps, OmegaSamps, Osamps, probRegion=0.95) {
 
     pts <- simplify2array(PointsList)
     allPts <- pts
+    if(logRatio == TRUE) {
+        allPts[2, ] <- log(allPts[2, ])
+        pts[2, ] <- log(pts[2, ])
+    }
     
     numPtsToRemove <- round(nsamps*(1-probRegion))
     while(numPtsToRemove > 0) {
@@ -146,6 +160,9 @@ getHullPoints <- function(nsamps, OmegaSamps, Osamps, probRegion=0.95) {
             numPtsToRemove <- numPtsToRemove - length(hullPoints)
         }
     }
+
+    
+    
     hullPoints <- chull(pts[1, ], pts[2, ])
 
     list(allPts=allPts, pts=pts, hullPoints=hullPoints)
