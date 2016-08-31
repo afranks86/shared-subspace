@@ -93,7 +93,7 @@ posteriorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups,
          ylim=c(0, ymax), cex=0, xlab="Angle", ylab=ylab, xaxt="n", cex.axis=cex.axis, cex.lab=1.5)
     axis(1, at=seq(-pi/2, pi/2, by=pi/4), labels=expression(-pi/2, -pi/4, 0, pi/4, pi/2), cex.axis=cex.axis, cex.lab=1.5)
 
-    
+    browser()
     for(g in groups) {
 
         pmPsi <- getPostMeanPsi(Osamps[, , g , ], OmegaSamps[, g, ],
@@ -920,32 +920,7 @@ R.rbmf.vector.mises <- function(Atilde, Ctilde, xinit) {
     
 }
 
-getVectorBMFMode <- function(A, b, vinit) {
-
-    k <- length(vinit)
-
-    xprev <- vinit[-k]
-    xk <- sqrt(1 - sum(xprev^2))
-    xgrad <- (2*A[-k, ] %*% xprev -
-              2*A[-k, k] * xprev^2 / xk +
-              b[-k] - b[k]*xprev/xk)
-    
-    xcur <- xprev  + 1/100 * xgrad
-    while( sum((xprev - xcur)^2) > 1e-5 ){
-
-        xprev <- xcur
-        xk <- sqrt(1 - sum(xprev^2))
-        xgrad <- (2*A[-k, ] %*% xprev -
-                  2*A[-k, k] * xprev^2 / xk +
-                  b[-k] - b[k]*xprev/xk)
-        xcur <- xprev  + 1/100 * xgrad
-        
-    }
-
-        
-}
-
-optimV <- function(Slist, P, S, R=S, Q=S-R, nvec, PhiList, PrecVec,
+optimV <- function(Slist, P, S, nvec, PhiList, PrecVec,
                    Vinit=NULL, tauStart=1, rho1=0.1, rho2=0.9,
                    maxIters=50, verbose=FALSE) {
 
@@ -964,7 +939,6 @@ optimV <- function(Slist, P, S, R=S, Q=S-R, nvec, PhiList, PrecVec,
         obj
     }
     
-
     G <- 0
     for(k in 1:length(PhiList)) {
 
@@ -1053,7 +1027,7 @@ lineSearch <- function(n, p, X, G, F, rho1, rho2, tauStart, maxIters=50) {
     Ytau 
 }
 
-subspaceEM <- function(Slist, P, S, R=S, Q=0, nvec, rho1=0.1, rho2=0.9,
+subspaceEM <- function(Slist, P, S, R=S, Q=S-R, nvec, rho1=0.1, rho2=0.9,
                        PrecVec=NULL,
                        PhiList=NULL,
                        Vstart=NULL,
@@ -1069,9 +1043,9 @@ subspaceEM <- function(Slist, P, S, R=S, Q=0, nvec, rho1=0.1, rho2=0.9,
 
         ## E[ 1/sigma^2 * (psi+I)^(-1) | V]
         PhiList <- list()
-        V1 <- Vstart[, 1:R]
-        if(R < S) {
-            V2 <- Vstart[, (R+1):S]
+        V1 <- Vstart[, 1:(S-Q)]
+        if(Q > 0) {
+            V2 <- Vstart[, (S-Q+1):S]
             Ssum <- Reduce('+', Slist)
             PhiShared <- solve(t(V2) %*% Ssum %*% V2) * (sum(nvec) + Q +1 )
         } else {
@@ -1079,10 +1053,8 @@ subspaceEM <- function(Slist, P, S, R=S, Q=0, nvec, rho1=0.1, rho2=0.9,
             PhiShared <- matrix(nrow=0, ncol=0)
         }
 
-
-
         for(k in 1:length(Slist)) {
-            PsiK <- solve(t(V1) %*% Slist[[k]] %*% V1) * (nvec[k] + R +1 )
+            PsiK <- solve(t(V1) %*% Slist[[k]] %*% V1) * (nvec[k] + (S-Q) +1 )
             PhiList[[k]] <- as.matrix(bdiag(PsiK, PhiShared))
         }
     }
@@ -1098,15 +1070,20 @@ subspaceEM <- function(Slist, P, S, R=S, Q=0, nvec, rho1=0.1, rho2=0.9,
     convCheck <- Inf
     iter <- 0
     while(convCheck > 1e-6 & iter < maxIters ) {
-        Vnew <- optimV(Slist=Slist, P=P, S=S, R=R, Q=Q, nvec,
+
+        ## ------- M-step -----------
+        Vnew <- optimV(Slist=Slist, P=P, S=S, nvec,
                             PhiList=PhiList, PrecVec=PrecVec,
                             rho1=rho1, rho2=rho2, Vinit=Vstart, verbose=verbose)
 
+
+        ## ---------- E-step -----------
+
         ## E[ 1/sigma^2 * (psi+I)^(-1) | V]
         PhiList <- list()
-        V1 <- Vnew[, 1:R]
-        if(R < S) {
-            V2 <- Vnew[, (R+1):S]
+        V1 <- Vnew[, 1:(S-Q)]
+        if(Q > 0) {
+            V2 <- Vnew[, (S-Q+1):S]
             Ssum <- Reduce('+', Slist)
             PhiShared <- solve(t(V2) %*% Ssum %*% V2) * (sum(nvec) + Q +1 )
         } else{
@@ -1115,7 +1092,7 @@ subspaceEM <- function(Slist, P, S, R=S, Q=0, nvec, rho1=0.1, rho2=0.9,
         }
         
         for(k in 1:length(Slist)) {
-            PsiK <- solve(t(V1) %*% Slist[[k]] %*% V1) * (nvec[k] + R +1 )
+            PsiK <- solve(t(V1) %*% Slist[[k]] %*% V1) * (nvec[k] + (S-Q) +1 )
             PhiList[[k]] <- as.matrix(bdiag(PsiK, PhiShared))
         }
 
@@ -1126,6 +1103,7 @@ subspaceEM <- function(Slist, P, S, R=S, Q=0, nvec, rho1=0.1, rho2=0.9,
                 (tr(Slist[[k]]) - tr( t(Vnew) %*% Slist[[k]] %*% Vnew ))
         }
 
+        ## ---- Check for convergence ------
         print(PrecVec)
         convCheck <- 1 - (norm(t(Vstart) %*% Vnew, type="F")/sqrt(S))
         Vstart <- Vnew

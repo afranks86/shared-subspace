@@ -1,7 +1,12 @@
-## init is a list containing initial V, U's, Omega's,
-## samples per group (nvec) and Sample covariance (Slist)
+## P=number of features, S=subspace dimension
+## psi_k has dimension R + Q <= S, where Q eigenvectors are common
+## and R eigenvectors vary across groups. 
+##
+## Slist: a list of p x p matrices corresponding to Y^TY
+## init: a list containing initial V, U's, Omega's,
+## nvec: vector of number of samples per group
 
-fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
+fitSubspace <- function(P, S, R, Q=S-R, Slist, nvec, ngroups=length(Slist),
                         niters=100, nskip=1, init=NULL, binaryO=FALSE,
                         verbose=TRUE, sigmaTruthList=NULL, draw=c(),
                         saveU=FALSE,
@@ -13,25 +18,27 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
     nskip <- nskip
     nsamps <- floor(niters/nskip)
 
+    if(R + Q > S)
+        stop("R + Q must be less than S")
+    
+
     if(saveU)
-        Usamps <- array(dim=c(P, S, ngroups, nsamps))
+        Usamps <- array(dim=c(P, RQ, ngroups, nsamps))
     else
         Usamps <- NULL
-    Osamps <- array(dim=c(S, S, ngroups, nsamps))
+    Osamps <- array(dim=c(S, R + Q, ngroups, nsamps))
     Vsamps <- array(dim=c(P, S, nsamps))
-    omegaSamps <- array(dim=c(S, ngroups, ncol=nsamps))
+    omegaSamps <- array(dim=c(R + Q, ngroups, ncol=nsamps))
     s2samps <- matrix(nrow=ngroups, ncol=nsamps)
 
     initItems <- c("V", "Ulist", "OmegaList")
     if( is.null(init) ) {
 
+        V1 <- matrix(0, nrow=P, ncol=(S-Q))
+        V1[1:(S-Q), 1:(S-Q)] <- diag(S-Q)
 
-
-        V1 <- matrix(0,nrow=P, ncol=R)
-        V1[1:R, 1:R] <- diag(R)
-
-        V2 <- matrix(0,nrow=P, ncol=S-R)
-        V2[(R+1):S, (R+1):S] <- diag((S-R))
+        V2 <- matrix(0, nrow=P, ncol=Q)
+        V2[(S-Q+1):S, (S-Q+1):S] <- diag(Q)
 
         V <- cbind(V1, V2)
         
@@ -40,10 +47,12 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
         SigInvInitList <- list()
         s2vec <- rexp(ngroups)
         for(k in 1:ngroups) {
-            OmegaList[[k]] <- rep(1/2, R)
+            OmegaList[[k]] <- rep(1/2, (R+Q))
 
-            Ok <- matrix(0, nrow=S, ncol=R)
+            Ok <- matrix(0, nrow=S, ncol=(R+Q))
             Ok[1:R, 1:R] <- diag(R)
+            if(Q > 0)
+                Ok[(S-Q+1):S, (R+1):(R+Q)] <- diag(Q)
 
             Olist[[k]] <- Ok
             Ulist[[k]] <- V %*% Ok
@@ -94,16 +103,18 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
         Ssum <- lapply(1:ngroups, function(k) Slist[[k]]/s2vec[k]) %>%
             Reduce('+', .)
 
-        ## Sample common omega
+        ## Sample common omega and common O
         Uk <- Ulist[[1]]
 
-        if(R < S) {
-            Omega2 <- sampleOmega(Ssum, Uk[, (R+1):S],
+        if(Q > 0) {
+            ## common omega
+            Omega2 <- sampleOmega(Ssum, Uk[, (R+1):(R+Q)],
                                   1, sum(nvec[k]))
         
             ## Sample common O
-            O2 <- sampleO(Ssum, Uk[, (R+1):S], 1, OmegaList[[k]][(R+1):S],
-                          V[, (R+1):S])
+            O2 <- sampleO(Ssum, Uk[, (R+1):(R+Q)], 1,
+                          OmegaList[[k]][(R+1):(R+Q)],
+                          V[, (S-Q+1):S])
         } else {
             Omega2 <- c()
             O2 <- matrix(nrow=0, ncol=0)
@@ -132,7 +143,7 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
             if(draw["O"]) {
                 
                 O1 <- sampleO(Slist[[k]], Uk[, 1:R], s2vec[k],
-                                  (OmegaList[[k]])[1:R], V[, 1:R])
+                                  (OmegaList[[k]])[1:R], V[, 1:(S-Q)])
                                   
                 Ok <- as.matrix(bdiag(O1, O2))
             }
@@ -147,7 +158,7 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
                     Usamps[, , k, i/nskip] <- Ulist[[k]]
 
                 Osamps[, , k, i/nskip] <- t(V) %*% Ulist[[k]]
-
+                
                 omegaSamps[, k, i/nskip] <- OmegaList[[k]]
                 s2samps[k, i/nskip] <- s2vec[k]
             }
@@ -192,7 +203,7 @@ fitSubspace <- function(P, S, R, Slist, nvec, ngroups=length(Slist),
         }
     }
 
-    list(S=S, R=R, V=V, init=init, ngroups=ngroups, Usamps=Usamps,
+    list(S=S, R=R, Q=Q, V=V, init=init, ngroups=ngroups, Usamps=Usamps,
          Osamps=Osamps, Vsamps=Vsamps, omegaSamps=omegaSamps, s2samps=s2samps)
 }
 
