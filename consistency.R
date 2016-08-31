@@ -21,13 +21,13 @@ S <- 2
 R <- S
 P <- 200
 
-maxK <- 20
-nrepl <- 20
+maxK <- 10
+nrepl <- 30
 
 ## runs with three different sets of eigenvalues for psi_k
 resMatList <- foreach(e=1:3) %dopar% {
 
-    resMat <- matrix(0, nrow=4, ncol=20)
+    resMat <- matrix(0, nrow=4, ncol=maxK)
     ## 10 replicates per generated data
     for(repl in 1:nrepl) {
         for(ngroups in 1:maxK) {
@@ -93,19 +93,23 @@ resMatList <- foreach(e=1:3) %dopar% {
 
     resMat
 }
+##save(resMatList, file="resMatList_K10.RData")
 
-pdf("paper/Figs/asymptotics.pdf")
+load("resMatList_K10.RData")
+
+pdf("paper/Figs/asymptotics.pdf", width=14)
 par(mar=c(5.1, 5.1, 4.1, 2.1))
-plot(resMatList[[1]][1, ], type="l", lwd=3, ylim=c(0, 1), lty=1, col="red",
-     xlab="Number of Groups", ylab=expression("Subspace Similarity"),
+plot(resMatList[[1]][1, 1:maxK], type="l", lwd=3, xlim=c(1, maxK), ylim=c(0, 1),
+     lty=1, col="red",
+     xlab="Number of Groups", ylab=expression("Subspace Accuracy"),
      cex.axis=2, cex.lab=2)
-lines(resMatList[[1]][2, ], lwd=3, col="red", lty=2)
+lines(resMatList[[1]][2, 1:maxK], lwd=3, col="red", lty=2)
 
-lines(resMatList[[2]][1, ], lwd=3, col="blue")
-lines(resMatList[[2]][2, ], lwd=3, col="blue", lty=2)
+lines(resMatList[[2]][1, 1:maxK], lwd=3, col="blue")
+lines(resMatList[[2]][2, 1:maxK], lwd=3, col="blue", lty=2)
 
-lines(resMatList[[3]][1, ], lwd=3, col="dark green")
-lines(resMatList[[3]][2, ], lwd=3, col="dark green", lty=2)
+lines(resMatList[[3]][1, 1:maxK], lwd=3, col="dark green")
+lines(resMatList[[3]][2, 1:maxK], lwd=3, col="dark green", lty=2)
 grid()
 legend("bottomright", legend=c("(5, 5)", "(5, 2)", "(50, 2)"), lwd=3, col=c("dark green", "red", "blue"), cex=1.5, bg="white", title=expression("("~lambda[1]~","~lambda[2]~")"))
 dev.off()
