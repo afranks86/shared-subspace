@@ -6,7 +6,7 @@
 #SBATCH -J ss3
 #SBATCH -o outfiles/ssg_%a.out #Standard output
 #SBATCH -e outfiles/ssg_%a.err #Standard error
-#SBATCH -p airoldi,stats #Partition to submit to 
+#SBATCH -p stats #Partition to submit to 
 #SBATCH --mem=10000  #Memory per node in MB (see also --mem-per-cpu)
 #SBATCH -a 1-100
 
@@ -129,7 +129,9 @@ for(fitType in 1:1) {
       NC <- NullC(Vinit)
       Vinit <- cbind(Vinit, NC[, sample(1:ncol(NC), size=(S - R*ngroups))])
     }
-    Vinit <- subspaceEM(dat, S=S, R=R, Vstart=Vinit, verbose=FALSE, rho1=0.5, rho2=0.5, maxIters=100)
+      Vinit <- subspaceEM(dat$Slist, P=P, S=S, R=R, Q=0, dat$nvec,
+                          Vstart=Vinit, verbose=FALSE,
+                          rho1=0.1, rho2=0.9, maxIters=100)$V
 
     ##cancor(svd(do.call(cbind, dat$Olist))$u, Vinit)$cor
       
@@ -145,8 +147,8 @@ for(fitType in 1:1) {
     s2vec <- rexp(ngroups)
 
     initSS <- list(V=Vinit, Ulist=Ulist, OmegaList=OmegaList, s2vec=s2vec)
-    res <- fitSubspace(dat$P, S, R, dat$Slist,
-                       dat$nvec, dat$ngroups, init=initSS,
+    res <- fitSubspace(dat$P, S, R, Q=0, Slist=dat$Slist,
+                       nvec=dat$nvec, ngroups=dat$ngroups, init=initSS,
                        niters=niters, sigmaTruthList=dat$SigmaList,
                        draw=c(V=FALSE))
     
