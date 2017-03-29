@@ -87,13 +87,12 @@ posteriorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups,
     }
     par(mar=c(5.1, 5.1, 4.1, 2.1))
     ylab <- ifelse(logRatio,
-                   expression("log(" ~ lambda[1]/lambda[2] ~ ")"),
+                   expression("log"[2]~"(" ~ lambda[1]/lambda[2] ~ ")"),
                    expression(lambda[1]/lambda[2]))
     plot(0, 0, xlim=c(-pi/2, pi/2),
-         ylim=c(0, ymax), cex=0, xlab="Angle", ylab=ylab, xaxt="n", cex.axis=cex.axis, cex.lab=1.5)
+         ylim=c(0, ymax), cex=0, xlab=expression("angle, acos("~U[1]^T*V[1]~")"), ylab=ylab, xaxt="n", cex.axis=cex.axis, cex.lab=1.5)
     axis(1, at=seq(-pi/2, pi/2, by=pi/4), labels=expression(-pi/2, -pi/4, 0, pi/4, pi/2), cex.axis=cex.axis, cex.lab=1.5)
 
-    browser()
     for(g in groups) {
 
         pmPsi <- getPostMeanPsi(Osamps[, , g , ], OmegaSamps[, g, ],
@@ -144,8 +143,8 @@ getHullPoints <- function(nsamps, OmegaSamps, Osamps, logRatio=FALSE,
     pts <- simplify2array(PointsList)
     allPts <- pts
     if(logRatio == TRUE) {
-        allPts[2, ] <- log(allPts[2, ])
-        pts[2, ] <- log(pts[2, ])
+        allPts[2, ] <- log2(allPts[2, ])
+        pts[2, ] <- log2(pts[2, ])
     }
     
     numPtsToRemove <- round(nsamps*(1-probRegion))
@@ -920,6 +919,11 @@ R.rbmf.vector.mises <- function(Atilde, Ctilde, xinit) {
     
 }
 
+##############################################################
+##############  Optimization on the Stiefel Manifold #########
+##############  This is the M-step in the EM algo ############
+##############################################################
+
 optimV <- function(Slist, P, S, nvec, PhiList, PrecVec,
                    Vinit=NULL, tauStart=1, rho1=0.1, rho2=0.9,
                    maxIters=50, verbose=FALSE) {
@@ -1037,45 +1041,12 @@ subspaceEM <- function(Slist, P, S, R=S, Q=S-R, nvec, rho1=0.1, rho2=0.9,
     if(is.null(Vstart)) {
         Vstart = rustiefel(P, S)
     }
-    if(is.null(PhiList)) {
 
-        PhiList <- list()
-
-        ## E[ 1/sigma^2 * (psi+I)^(-1) | V]
-        PhiList <- list()
-        V1 <- Vstart[, 1:(S-Q)]
-        if(Q > 0) {
-            V2 <- Vstart[, (S-Q+1):S]
-            Ssum <- Reduce('+', Slist)
-            PhiShared <- solve(t(V2) %*% Ssum %*% V2) * (sum(nvec) + Q +1 )
-        } else {
-            V2 <- matrix(nrow=nrow(V1), ncol=0)
-            PhiShared <- matrix(nrow=0, ncol=0)
-        }
-
-        for(k in 1:length(Slist)) {
-            PsiK <- solve(t(V1) %*% Slist[[k]] %*% V1) * (nvec[k] + (S-Q) +1 )
-            PhiList[[k]] <- as.matrix(bdiag(PsiK, PhiShared))
-        }
-    }
-    if(is.null(PrecVec)) {
-        ## E[ 1/sigma^2  | V]
-        PrecVec <- c()
-        for(k in 1:length(Slist)) {
-            PrecVec[k] <- (nvec[k] * (P - S) + 2) /
-                (tr(Slist[[k]]) - tr( t(Vstart) %*% Slist[[k]] %*% Vstart ))
-        }
-    }
+    Vnew <-  Vstart
 
     convCheck <- Inf
     iter <- 0
     while(convCheck > 1e-6 & iter < maxIters ) {
-
-        ## ------- M-step -----------
-        Vnew <- optimV(Slist=Slist, P=P, S=S, nvec,
-                            PhiList=PhiList, PrecVec=PrecVec,
-                            rho1=rho1, rho2=rho2, Vinit=Vstart, verbose=verbose)
-
 
         ## ---------- E-step -----------
 
@@ -1103,6 +1074,12 @@ subspaceEM <- function(Slist, P, S, R=S, Q=S-R, nvec, rho1=0.1, rho2=0.9,
                 (tr(Slist[[k]]) - tr( t(Vnew) %*% Slist[[k]] %*% Vnew ))
         }
 
+        ## ------- M-step -----------
+        Vnew <- optimV(Slist=Slist, P=P, S=S, nvec,
+                       PhiList=PhiList, PrecVec=PrecVec,
+                       rho1=rho1, rho2=rho2, Vinit=Vstart,
+                       verbose=verbose)
+        
         ## ---- Check for convergence ------
         print(PrecVec)
         convCheck <- 1 - (norm(t(Vstart) %*% Vnew, type="F")/sqrt(S))
