@@ -3,12 +3,24 @@ rm(list=ls())
 library(car)
 library(rstiefel)
 library(xtable)
+library(made4)
+library(coda)
+
 source("helper.R")
 source("fit-subspace.R")
 source("https://bioconductor.org/biocLite.R")
+
 ## biocLite("hgu95av2.db")
 ## library(hgu95av2.db)
 load("LeukemiaData/leukemia.RData")
+
+## Look at PCA for pooled data to evaluate differences in means
+YpooledDemeaned <- sweep(Ypooled, 2, colMeans(Ypooled), '-')
+indices <- which(typeVec %in% c("TEL-AML1", "T-ALL", "MLL"))
+plotarrays(YpooledDemeaned[indices, ], classvec=typeVec[indices],
+           star=FALSE, arraycol=c("red", "blue", "dark green"))
+plotarrays(YpooledDemeaned, classvec=typeVec,
+           star=FALSE)
 
 ## number of eigenvectors if pooled space
 S <- 14
@@ -24,17 +36,29 @@ for( k in 1:ngroups ) {
     Slist[[k]] <- t(residual) %*% residual
 }
 pooledResiduals <- do.call(rbind, residualList)
-plot(svd(residualList[[ngroups]]/sqrt(nvec[ngroups]))$d^2, pch=19, cex=0.75)
+plot(svd(residualList[[ngroups]]/sqrt(nvec[ngroups]))$d^2, pch=19, cex=0.75, ylim=c(0, 50))
 for(k in 1:6) {
     points(svd(residualList[[k]]/sqrt(nvec[k]))$d^2, col=k+1, pch=19, cex=0.75)
 }
 svd(residualList[[ngroups]]/sqrt(nvec[ngroups]))$d^2
 
-Vinit <- svd(do.call(cbind, lapply(1:ngroups, function(k) svd(t(residualList[[k]]))$u[, 1:R])))$u[, 1:min(ngroups*R, S)]
+Vinit <- svd(do.call(cbind, lapply(1:ngroups, function(k) svd(t(residualList[[k]]))$u[, 1:S])))$u[, 1:min(ngroups*R, S)]
+
+isoVar <- sapply(1:ngroups, function(i) median(apply(residualList[[i]], 2, var)))
+weightsList <- sapply(1:ngroups, function(i) {
+    evals <- svd(residualList[[i]]/sqrt(nvec[i]))$d^2
+    dp <- ifelse(evals/isoVar[i] <= (1+sqrt(P/nvec[i])), 0, sqrt((1-P/nvec[i]/(evals/isoVar[i]-1)^2) / (1+P/nvec[i]/(evals/isoVar[i]-1))))
+    weights <- 1/(1-dp) - 1
+    weights
+})
+
+## Weighted initialization
+Vinit <- svd(do.call(cbind, lapply(1:ngroups, function(k) svd(t(residualList[[k]]))$u[, 1:S] %*%  diag(weightsList[[k]][1:S]))))$u[, 1:min(ngroups*R, S)]
+
+
 ## Vinit <- Vinit[, sample(1:ncol(Vinit))]
 ## Vinit <- rustiefel(P, S)
-PrecVec = rep(100, ngroups)
-EMFit <- subspaceEM(Slist, P=P, S=S, R=R, nvec=nvec, Vstart=Vinit, PrecVec=PrecVec, verbose=TRUE, rho1=1e-5, rho2=1-1e-5)
+EMFit <- subspaceEM(Slist, P=P, S=S, R=R, nvec=nvec, Vstart=Vinit, verbose=TRUE, rho1=1e-5, rho2=1-1e-5)
 Vinit <- EMFit$V
 
 save(EMFit, Vinit, S, R, P, nvec, residualList,
@@ -57,7 +81,7 @@ evalRatiosQuad <- sapply(1:ngroups, function(k) {
     evals <- svd(residualList[[k]])$d[1:S]^2/nvec[k]
     b <- (1/EMFit$PrecVec[k]*P/nvec[k] - evals - 1)
 
-    quadSol <- (-b + sqrt(b^2 - 4*evals))/2
+    quadSol <- (-b + sqrt(b^2 - 4*evals))/2p
     quadSol[is.nan(quadSol)] <- (evals - (1/EMFit$PrecVec[k]*P/nvec[k]))[is.nan(quadSol)]
     denom <- sum(quadSol)
     
@@ -93,13 +117,18 @@ samples <- fitSubspace(P, S, R, Q=S-R, Slist,
 samples$Usamps <- NULL
 save(samples, initSS, file=sprintf("leukemiaBayes-%s.RData", format(Sys.Date(), "%m-%d")))
 
+#########################
 ## Posterior plots
+#########################
+
+regionColors <- c(4, 2:3, 1, 5:7)
+
 pdf(sprintf("paper/Figs/leukemiaPosterior-%s.pdf", format(Sys.Date(), "%m-%d")), font="Times")
 with(samples,
      posteriorPlot(Osamps[1:R, 1:R, 2:7, ], omegaSamps[1:R, 2:7, ],
                 s2samps[2:7, ], nsamps=1000, groups=1:(ngroups-1),
                 probRegion=0.95, hline=NULL, logRatio=TRUE,
-                plotPoints=FALSE, col=2:7, ymax=log(80)))
+                plotPoints=FALSE, col=regionColors[2:7], ymax=log2(120)))
 group1pts <- with(samples, getHullPoints(nsamps=100, omegaSamps[1:2, 1, ], Osamps[1:2, 1:2, 1, ], logRatio=TRUE)$allPts)
 
 split1 <- which(group1pts[1, ] < 0)
@@ -112,13 +141,14 @@ pts1[2, 4] <- min(pts1[2, ])
 pts2 <- group1pts[, split2[hull2]]
 pts2 <- pts2[, 3:ncol(pts2)]
 pts2 <- cbind(c(pi/2, min(pts1[2, ])), pts2)
-polygon(pts1[1, ], pts1[2, ], lwd=0.01, border="black", col=alpha("black", 1/4), lty=1)
-polygon(pts2[1, ], pts2[2, ], lwd=0.01, border="black", col=alpha("black", 1/4), lty=1)
-lines(pts1[1, c(7:9, 1:4)], pts1[2, c(7:9, 1:4)], col="black", lwd=3)
-lines(pts2[1, 1:5], pts2[2, 1:5], col="black", lwd=3)
-legend("topright", legend=unique(typeVec), col=1:7, pch=19, bty="n")
+polygon(pts1[1, ], pts1[2, ], lwd=0.01, border="black", col=alpha(regionColors[1], 1/4), lty=1)
+polygon(pts2[1, ], pts2[2, ], lwd=0.01, border="black", col=alpha(regionColors[1], 1/4), lty=1)
+lines(pts1[1, c(7:9, 1:4)], pts1[2, c(7:9, 1:4)], col=regionColors[1], lwd=3)
+lines(pts2[1, 1:5], pts2[2, 1:5], col=regionColors[1], lwd=3)
+legend("topright", legend=unique(typeVec), col=regionColors, pch=19, bty="n", title="Leukemia type", cex=1.2)
 dev.off()
 
+contourColors <- c("blue", "red", "green")
 pdf(sprintf("paper/Figs/leukemia-biplot-%s.pdf", format(Sys.Date(), "%m-%d")), font="Times")
 mag <- apply(EMFit$V[, 1:2], 1, function(x) sqrt(sum(x^2)))
 indices <- which(mag > quantile(mag, 0.99))
@@ -140,7 +170,8 @@ points(Vsub[bottom, 1], Vsub[bottom, 2], xlab="V1", ylab="V2", cex=1.5,
                                         #     xlab="V1", ylab="V2", cex=0.5, pos=4)
 
 abline(h=0, v=0)
-legend("topright", legend=unique(typeVec)[1:3], lty=1, lwd=2, col=1:3, cex=1, bty='n', ncol=1)
+legend("topright", legend=unique(typeVec)[1:3], lty=1, lwd=2, col=contourColors,
+       cex=1.3, bty='n', ncol=1, title="Leukemia Type")
 
 
 probeMap <- as.list(hgu95av2SYMBOL)
@@ -173,10 +204,13 @@ for(k in 1:3) {
     lamRatio <- lambda[maxIndex]/lambda[-maxIndex]
     angle <- atan(evecs[2, maxIndex]/evecs[1, maxIndex])
     print(angle)
-    ellipse(center=c(0,0), shape=evecs[, 1:2] %*% diag(lambda[1:2]) %*% t(evecs[, 1:2])/lambda[maxIndex], radius=0.01, col=k, center.cex=000)
-    ellipse(center=c(0,0), shape=evecs[, 1:2] %*% diag(lambda[1:2]) %*% t(evecs[, 1:2])/lambda[maxIndex], radius=0.025, col=k, center.cex=000)
-    ellipse(center=c(0,0), shape=evecs[, 1:2] %*% diag(lambda[1:2]) %*% t(evecs[, 1:2])/lambda[maxIndex], radius=0.04, col=k, center.cex=000)
-    ## points(angle, lamRatio, col=k, pch=19, cex=2)
+
+    ## arrows(0, 0, evecs[1, 1]*.05, evecs[2, 1]*.05, col=k, lwd=3)
+    ## arrows(0, 0, -evecs[1, 1]*.05, -evecs[2, 1]*.05, col=k, lwd=3)
+    ellipse(center=c(0,0), shape=evecs[, 1:2] %*% diag(lambda[1:2]) %*% t(evecs[, 1:2])/lambda[maxIndex], radius=0.01, col=contourColors[k], center.cex=000)
+    ellipse(center=c(0,0), shape=evecs[, 1:2] %*% diag(lambda[1:2]) %*% t(evecs[, 1:2])/lambda[maxIndex], radius=0.025, col=contourColors[k], center.cex=000)
+    ellipse(center=c(0,0), shape=evecs[, 1:2] %*% diag(lambda[1:2]) %*% t(evecs[, 1:2])/lambda[maxIndex], radius=0.04, col=contourColors[k], center.cex=000)
+    points(angle, lamRatio, col=k, pch=19, cex=2)
 
 }
 dev.off()

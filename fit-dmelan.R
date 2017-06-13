@@ -51,7 +51,7 @@ getRank(fit$residuals)
 ## Vinit <- svd(do.call(cbind, lapply(1:ngroups, function(k) svd(t(residualList[[k]]))$u[, 1:R])))$u[, 1:min(ngroups*R, S)]
 Vinit <- svd(do.call(cbind, lapply(1:ngroups, function(k) svd(t(residualList[[k]]))$u[, 1:S])))$u[, 1:S]
 PrecVec = rep(5, ngroups)
-EMFit <- subspaceEM(Slist, P=P, S=S, R=R, nvec=nvec, Vstart=Vinit, PrecVec=PrecVec, verbose=TRUE, rho1=1e-5, rho2=1-1e-5)
+EMFit <- subspaceEM(Slist, P=P, S=S, R=R, nvec=nvec, Vstart=Vinit, verbose=TRUE, rho1=1e-5, rho2=1-1e-5)
 Vinit <- EMFit$V
 
 ## In paper using, 04-28
