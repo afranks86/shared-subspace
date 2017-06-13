@@ -1,0 +1,164 @@
+\documentclass{article}
+\pdfoutput=1
+\pdfminorversion=4
+%\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{latexsym}
+\usepackage{textcomp}
+\usepackage{longtable}
+\usepackage{multirow, booktabs}
+\usepackage{natbib}
+ \bibpunct{(}{)}{;}{a}{,}{,}
+\usepackage{url}
+\usepackage{hyperref}
+\usepackage{amsmath, amsfonts, amssymb}
+\usepackage{mathtools}
+\usepackage{chemarrow}
+\usepackage{subfigure}
+\usepackage{rotating}
+\usepackage{multirow}
+\usepackage{tikz}
+\usepackage[margin=.75in]{geometry}
+
+\renewcommand{\baselinestretch}{1.5}
+\newcommand{\bl}[1]{{\mathbf #1}}
+\newcommand{\bs}[1]{{\boldsymbol #1}}
+\newcommand{\tr}{\text{tr}}
+\newcommand{\etr}{\text{etr}}
+\newcommand{\Exp}[1]{{\text{E}}[ \ensuremath{ #1 } ]  }
+
+\newtheorem{theorem}{Theorem}
+
+\newcommand{\edits}[1]{{\textsf{\textcolor{red}{#1}}}}
+
+
+\newenvironment{tquotation}{\begin{quotation}\color{gray}}{\end{quotation}}
+\newenvironment{myquotation}{\begin{quotation}\slshape}{\end{quotation}}
+\newenvironment{resp}{\begin{quotation}\noindent\slshape}{\end{quotation}}
+\newcommand{\todo}[1]{{\textsf{\textcolor{red}{TODO: #1}}}}
+%\usepackage{amsthm}
+
+\title{Shared Subspace Models for Multi-Group Covariance Estimation}
+
+
+\begin{document}
+
+\section{Reviewer BLAH}
+
+\textbf{\noindent 1. Page 5 has $S_k = Y_k^TY_K$ while Page 10 has $S_k = Y_kY_k^T$}
+
+\begin{resp}
+We have fixedt his to correctly reflect the fact that $S_k = Y_k^TY_K$ as we have defined $Y_k$ and an $n \times p$ matrix.
+\end{resp}
+
+\noindent   \textbf{2. Page 8. It is not clear to me why $||Y_kV||_F/n_k$ is a consistent estimator for the sum
+of the eigenvalues of $V^T\Sigma_kV$. The quantity  $||Y_kV||_F/n_k$  seems to be a consistent estimator of $||V^T\Sigma_kV||^2_F$ and thus $||Y_kV||_F/n_k$ converges to 0. A consistent estimator of the sum of the eigenvalues of $V^T\Sigma_kV$ is Tr($V^TY_k^TY_kV)/n_k$}
+
+\begin{resp}
+Indeed, $||Y_kV||^2_F/n_k$ is a consistent estimator for the sum of the first $s$ eigenvalues of $\Sigma_k$.  In the draft, we excluded the square and thank the reviewer for highlighting this error.  The following argument holds:
+
+\begin{align*}
+||Y_kV||_F^2/n_k &= \tr (V^TY_k^TY_k/n_kV)\\
+&= \tr (V^T\hat{\Sigma}_kV)\\
+&\to tr(V^T\Sigma_kV)\\
+& = tr(\Psi_k + \sigma_k^2I)
+\end{align*}
+
+\end{resp}
+
+\noindent \textbf{3. Page 11. Inference of $O_k$ deserves more discussion. In fact, I am a bit confused here. The matrix $O_k$ is not identifiable because $VO_k\Lambda_kO^T \tilde{V}\tilde{O_k}Λ_k\tilde{O}\tilde{V}^T$ where $\tilde{V} = VW$ and $\tilde{O}_k = W^TO_k$ for some orthonormal W.}
+
+\begin{resp}
+We thank the reviewer for highlighting this source of confusion.  As we noted in the paper, although $V$ is only identifiable up to right rotations, the matrix $VV^T$, which defines
+the plane of variation shared by all groups, is identifiable. Of course, this implies that $O$ itself is only identifiable once we have fixed a basis $V$.  The particular basis for $V$ is usually determined by the particular initialization to the EM algorithm. This itself isn't a problem since we are primarily interested in relative differences between the groups on the shared subspace.  For instance, if we had fixed a different basis for the subspace in the leukemia example, then the left plot in Figure 7 would be rotated version of the current figure, but the top 1\% of genes with with the largest magnitude loadings would not change.  Similarly, we would still correctly identify the genes that are most variable in each leukemia group. \todo{We have clarified these points in the paper.}
+\end{resp}
+
+
+\noindent \textbf{4. Page 16. I don’t think concatenate the data from all groups is a good way for rank selection. Consider the case $r = 2, K = 2$ and $n_1 =\sqrt{n_2}$. The top two eigenvalues of
+the first group are $\lambda_1+\sigma_1^2 = \lambda_2+\sigma_1^2 > \sigma_1^2$.  The top two eigenvalues of the second group are both $\sigma_2^2$  or perhaps very very close to $\sigma_2^2$. In other words, there is almost no signal in the second group. Combining the data from two groups will mask the signal in the first group and in this case it is impossible for Gavish and Donoho’s estimator to work. The correct way to do it in this case is to use Gavish and Donoho’s estimator only in the first group. Generally, rank selection in this problem is complicated. Depending on the situation, one may want to assign different weights to different groups while using Gavish and Donoho’s estimator. Here I just provide a counter-example. I hope the authors can do a thorough revision of this section.}
+
+\begin{resp}
+\end{resp}
+
+\noindent \textbf{5. Page 18. The whole Section 5 is a bit trivial. The conclusion is obvious. More groups means more data, which certainly implies higher accuracy. Moreover, only the case when groups are identically distributed is analyzed. This is the case that everyone will have the right intuition. There seems no need to write an entire section discussing it.  Unless the authors can give a general analysis, I will suggest remove this section.}
+
+\begin{resp}
+We believe that this section still has merit, although we have reframed the section to emphasize the most important points.  The purpose of this section is not to point out that ``more groups mean more data'' nor to provide an analysis for the case of $iid$ groups.  Rather, section is meant to identify a benchmark on the accuracy of the shared subspace estimator.  In general, this is a very hard problem, as the subspace accuracy depends on both the eigenvalues and eigenvectors of $\psi_k$.  When the eigenvalues from each group are equal, we conjecture that $\tr(\hat{V}\hat{V}^TVV^T)/\sqrt(S) \geq $ with equality if and only if the eigenvectors from each group are the same.  When the eigenvectors are highly variable across groups, the accuracy of the shared subspac estimator increases dramatically.  Our simulations support this conjecture. 
+
+
+Finally, as noted by \citet{} estimating the accuracy of the sample eigenvectors in the spiked covariance model is a hard problem that is not entirely well studied.  In our case, although the ML solution is clearly related to the eigenvectors, we do not have access to a simple function relating the eigenvectors of each sample covariance matrix to the ML solution, and thus it is not obvious how we can use results from RMT. 
+\end{resp}
+
+\noindent \textbf{6. Since $\Sigma_k = V\Psi_kV^T + \sigma^2_kI$ direct calculation gives
+$\frac{\sum_k n_k\Sigma_k}{\sum_k n_k} = V\Psi V^T + \sigma^2I$ where $\Psi = \frac{\sum_k n_k \psi_k}{\sum n_k}$ and $\sigma^2 = \sum_k \frac{n_k \sigma_k^2}{\sum n_K}$.  This suggest one can directly apply an SVD on the sample covariance $\hat{\Sigma} = \frac{\sum S_k}{\sum n_k}$ to obtain $\hat{V}$. This naive method ignores the difference among groups, but avoid estimation of other nuisance. When the difference between different groups are not very large, I suspect this naive method should perform better. I suggest the authors compare this naive alternative with their proposal on both simulated and real data.  It will be helpful for readers to be informed when to use the naive one and when to use the proposed EM algorithm.}
+
+\begin{resp}
+We thank the reviwer for the interesting suggestion.  The suggested comparisons are closely related to the results presented in row 2 of table 1, comparing the performance of different models when the groups are in fact iid.  When the groups are identical, , .  Most importantly, the reviewer highlights the importance of identifying a simple method for initializing the EM algorithm (see below).
+\end{resp}
+
+\textbf{7. I wonder if the EM algorithm can be stuck at local. I also wonder how the authors initialize the algorithm. In particular, does the naive estimator suggested in the last point serve as a good initializer?}
+
+\begin{resp}
+
+We are in fact using an initialization chosen in a very similar, but did not include the details in the first draft of the paper.  We now have a section in the paper on convergence of the EM algorithm and the importance of a reasonable initialization.
+
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.5\textwidth]{../../Figs/mode-histogram}
+        \label{fig:modeHist}
+    \caption{ Subspace similarity ($\tr(\hat{V}\hat{V}^TVV^T)/s$)
+      between EM estimates and the true shared subspace for 1000 random initializations (grey) and ``smart'' intialization (red line).  }
+\end{figure}
+\end{resp}
+
+\section{}
+
+The heterogeneity is imposed via $\Psi_k$’s and information is shared via V (of suitable dimensions).  The modeling framework is interesting, but it does not come to be as a “surprise” in any way or form. The authors propose an empirical Bayes framework to perform inference. Some “running” justifications via RMT is used in various places of the paper.  In summary, I find the paper interesting. However, the methods employed in the paper as well as the analysis comes across to me as rather straightforward. I do not see sufficient novelty in the paper in any of the areas of modeling, computation or theory to warrant a publication in JRSSB.  Some comments are provided below
+
+\begin{resp}
+\end{resp}
+
+The estimation of the parameters carried out via EM comes across to me as standard. The sampling procedures, as well as the choice of priors seem to be (directly) motivated via earlier work, some of them done by a subset of the authors.  One of the main criticisms for EM type algorithms is that there is no rigorous justification of the convergence of this procedure – especially because the problem considered involves dealing with extremely non-convex optimization problems. What can be said about the quality of the estimates of V , $\phi$, etc that are obtained? Are they prone to poor local minima or do they reach good solutions with provable guarantees (possibly under assumptions on the data)? An important theme of current research at the interface of statistical computing and optimization is to understand formal guarantees on the EM procedure.  Some studies along these lines may greatly benefit the paper.
+
+\begin{resp}
+\todo{}
+\end{resp}
+
+The analysis in Section 5 is interesting but is not complete (agreed, some simulation results
+are provided) for the joint estimation problem. Can the gains be quantified more formally
+by appealing to RMT results — by accounting for the fact that several parameters are being
+jointly estimated?
+
+\begin{resp}
+\end{resp}
+
+The Gavish Donoho threshold applies for a specific class of models (way more special than
+the classes studied in this paper) – I am not sure if their threshold can be justified rigorously
+in the context of the models being studied in this paper.
+
+\begin{resp}
+The Gavish-Donoho estimator applies to the class of spiked covariance models (single group).  Since each covariance matrix is a spiked covariance matrix, in fact the Gavish-Donoho threshold applies to estimating the rank from each group individually.  The challenge generalizing the rank estimator to the shared subspace setting.  \todo{} 
+\end{resp}
+
+\section{editor}
+
+In addition, the following points are based on my own non-expert reading of your work. If you decide to revise and resubmit, I would also like you to clarify these in the next version of the paper.
+
+1. I think the problem is rather specific – so I wonder if your work is of generic enough interest for the mainstream of Series B readers.
+
+\begin{resp}
+\end{resp}
+
+2. What happens if the spiked covariance model holds only approximately?
+
+\begin{resp}
+\end{resp}
+
+3. In my first decision letter, I asked for the theoretical description of the properties of your method,but I am not sure if this has been done successfully. In particular, I cannot see theorem-type results quantifying the behaviour of your procedure.
+
+\begin{resp}
+\todo{BLAH}
+\end{resp}
+
+\end{document}
