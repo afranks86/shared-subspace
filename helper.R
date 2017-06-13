@@ -964,7 +964,8 @@ optimV <- function(Slist, P, S, nvec, PhiList, PrecVec,
         
         V <- lineSearch(P, S, V, G, F, rho1, rho2, tauStart)
         Fcur <- F(V)
-        
+
+        Gprev <- G
         G <- 0
         for(k in 1:length(PhiList)) {
             G <- G + Slist[[k]] %*%  (V %*%  PhiList[[k]])  -
@@ -978,8 +979,79 @@ optimV <- function(Slist, P, S, nvec, PhiList, PrecVec,
 }
 
 
-## optimization algorithm based on Wen 2013
-lineSearch <- function(n, p, X, G, F, rho1, rho2, tauStart, maxIters=50) {
+optimV2 <- function(Slist, P, S, nvec, PhiList, PrecVec,
+                    Vinit=NULL, rho=0.1,
+                    maxIters=50, verbose=FALSE) {
+
+    if(is.null(Vinit)) 
+        V <- rustiefel(P, S)
+    else
+        V <- Vinit
+
+    ## Function to optimize
+    F <- function(V) {
+        obj <- 0
+        for(k in 1:length(PhiList)) {
+            obj <- obj +
+                1/2 * tr(  t(V) %*% Slist[[k]] %*% V %*% PhiList[[k]] ) -
+                1/2 * PrecVec[k] * tr(t(V) %*% Slist[[k]] %*% V)
+        }
+        obj
+    }
+
+    ## dF(X)/dX
+    dF <- function(V) {
+        G <- 0
+        for(k in 1:length(PhiList)) {
+
+            G <- G + Slist[[k]] %*%  (V %*%  PhiList[[k]])  -
+                PrecVec[k] * Slist[[k]] %*%  V
+        }
+        G
+    }
+
+
+    eta <- 0.2
+    iter <- 1
+    Vprev <- rustiefel(P, S)
+    Fprev <- 0
+    Fcur <- F(V)
+    Ccur <- Fcur
+    Gcur <- dF(V)
+    Gprev <- dF(Vprev)
+    Qcur <- 1
+
+    while(Fprev/Fcur < 1-1e-4 & iter < maxIters) {
+
+        Fprev <- Fcur
+        if(verbose) {
+            print(sprintf("Iteration %i: %f", iter, Fprev))
+        }
+
+        newV <- lineSearchBB(P, S, V, Vprev, Gcur, Gprev, F, rho, Ccur)
+
+        ## Update
+        Vprev <- V
+        V <- newV
+        Fcur <- F(V)
+        Gprev <- Gcur
+        Gcur <- dF(V)
+
+        Qprev <- Qcur
+        Qcur <- eta*Qcur + 1
+        
+        Ccur <- (eta*Qprev*Ccur + Fcur) / Qcur
+        
+        iter <- iter + 1
+    }
+
+    V
+}
+
+
+## A curvilinear search method (Wen and Yin 2013, Algo 1)
+lineSearch <- function(n, p, X, G, F, rho1, rho2, tauStart, maxIters=100) {
+
     reached <- FALSE
     tau <- tauStart
 
@@ -998,9 +1070,9 @@ lineSearch <- function(n, p, X, G, F, rho1, rho2, tauStart, maxIters=50) {
     H <- solve(diag(2*p) + tau/2*t(V) %*% U)
     
     Ytau <- X - tau * U %*% (H %*% t(V) %*% X)
-    FprimeY0 <- sum(diag(t(G) %*% -A %*% X))
+    FprimeY0 <- tr( t(G) %*% -A %*% X ) 
     B <- diag(n) - tau/2*U %*% H %*% t(V)
-    FprimeYtau <- sum(diag(t(G) %*% -B %*% A %*% (X + Ytau)/2))
+    FprimeYtau <- tr( t(G) %*% -B %*% A %*% (X + Ytau)/2 )
 
     ## Check Armijo-Wolfe conditions
     minVal <- F(X)
@@ -1015,26 +1087,81 @@ lineSearch <- function(n, p, X, G, F, rho1, rho2, tauStart, maxIters=50) {
         }
         
         if(iter > maxIters) {
-                print("Reached max iters")
-                break
+            print("Reached max iters")
+            break
         }
 
         tau <- tau/2
 
-        Ytau <- X - tau * U %*% (solve(diag(2*p) + tau/2 * t(V) %*% U) %*% t(V) %*% X)
-        FprimeY0 <- sum(diag(t(G) %*% -A %*% X))
-        B <- diag(n) - tau/2*U %*% solve(diag(2*p) + tau/2*t(V) %*% U) %*% t(V)
-        FprimeYtau <- sum(diag(t(G) %*% -B %*% A %*% (X + Ytau)/2))
+        HV <- solve(diag(2*p) + tau/2 * t(V) %*% U) %*% t(V)
+        
+        Ytau <- X - tau * U %*% (HV %*% X)
+        FprimeY0 <- tr( t(G) %*% -A %*% X )
+        B <- diag(n) - tau/2*U %*% HV
+        FprimeYtau <- tr( t(G) %*% -B %*% A %*% (X + Ytau)/2 )
         iter <- iter + 1
     }
 
     Ytau 
 }
 
+## A curvilinear search method with BB steps (Wen and Yin 2013, Algo 2)
+## n: number of samples
+## p: number of features
+## F: function to optimize
+
+## Zhang and Hager 2004
+lineSearchBB <- function(n, p, X, Xprev, G, Gprev, F, rho, C, maxIters=100) {
+
+    A <- G %*% t(X) - X %*% t(G)
+    U <- cbind(G, X)
+    V <- cbind(X, -1*G)
+
+    Sk <- X - Xprev
+    Mk <- (G - X %*% t(G) %*% X) - (Gprev - Xprev %*% t(Gprev) %*% Xprev)
+
+    tau <- tr(t(Sk) %*% Sk) / abs(tr(t(Sk) %*%  Mk))
+
+    ## If tau is too large condition number is too large
+    ## and matrix can't be inverted, so reduce
+    while(kappa(diag(2*p) + tau/2*t(V) %*% U) > 1e12 ) {
+         tau <- tau/2
+    }
+
+    
+    HV <- solve(diag(2*p) + tau/2 * t(V) %*% U) %*% t(V)
+    Ytau <- X - tau * U %*% (HV %*% X)
+    FprimeY0 <- sum(diag(t(G) %*% -A %*% X))
+    print(FprimeY0)
+
+    iter <- 1
+
+    while(F(Ytau) > C + rho*tau*FprimeY0) {
+
+        tau <- tau/2
+
+        if(iter > maxIters) {
+            print("Reached max iters")
+            break
+        }
+
+        HV <- solve(diag(2*p) + tau/2 * t(V) %*% U) %*% t(V)
+        
+        Ytau <- X - tau * U %*% (HV %*% X)
+        FprimeY0 <- sum(diag(t(G) %*% -A %*% X))
+        B <- diag(n) - tau/2*U %*% HV
+        FprimeYtau <- tr( t(G) %*% -B %*% A %*% (X + Ytau)/2 )
+
+        iter <- iter + 1
+        
+    }
+
+    Ytau
+    
+}
+
 subspaceEM <- function(Slist, P, S, R=S, Q=S-R, nvec, rho1=0.1, rho2=0.9,
-                       PrecVec=NULL,
-                       PhiList=NULL,
-                       Vstart=NULL,
+                       Vstart=NULL, stiefelAlgo=1,
                        maxIters=10,
                        verbose=FALSE) {
     
@@ -1075,17 +1202,27 @@ subspaceEM <- function(Slist, P, S, R=S, Q=S-R, nvec, rho1=0.1, rho2=0.9,
         }
 
         ## ------- M-step -----------
-        Vnew <- optimV(Slist=Slist, P=P, S=S, nvec,
-                       PhiList=PhiList, PrecVec=PrecVec,
-                       rho1=rho1, rho2=rho2, Vinit=Vstart,
-                       verbose=verbose)
+        if(stiefelAlgo == 1) {
+            Vnew <- optimV(Slist=Slist, P=P, S=S, nvec,
+                           PhiList=PhiList, PrecVec=PrecVec,
+                           rho1=rho1, rho2=rho2, Vinit=Vstart,
+                           verbose=verbose)
+        } else {
+            Vnew <- optimV2(Slist=Slist, P=P, S=S, nvec,
+                           PhiList=PhiList, PrecVec=PrecVec,
+                           rho=rho1, Vinit=Vstart,
+                           verbose=verbose)
+        }
         
         ## ---- Check for convergence ------
-        print(PrecVec)
+        
         convCheck <- 1 - (norm(t(Vstart) %*% Vnew, type="F")/sqrt(S))
         Vstart <- Vnew
         iter <- iter + 1
-        print(convCheck)
+        if(verbose) {
+            print(PrecVec)
+            print(convCheck)
+        }
         
     }
     
@@ -1117,4 +1254,112 @@ sumFirstP <- function(M, n, p, rho1=0.1, rho2=0.9, tol=1-1e-6) {
     }
 
     X
+}
+
+
+##################################################3
+
+
+optimV3 <- function(Ylist, P, S, nvec, Vinit=NULL, rho=0.1,
+                    maxIters=50, verbose=FALSE) {
+    
+    if(is.null(Vinit)) 
+        V <- rustiefel(P, S)
+    else
+        V <- Vinit## G <- G +
+            ##     nvec[k]/2 * (2*VSVinv - diag(diag(VSVinv))) %*% t(V) %*% Slist[[k]]
+            ## + nvec[k] * (P - S)/2 * diag(-1/(tr(Slist[[k]]) - tr(VSV)), S) %*% t(V) %*% Slist[[k]]
+
+    Slist <- lapply(Ylist, function(Y) t(Y) %*% Y)
+    ## Function to optimize
+    F <- function(V) {
+        obj <- 0
+        for(k in 1:length(Slist)) {
+            VSV <- t(V) %*% Slist[[k]] %*% V
+            obj <- obj + nvec[k]/2 * log(det(VSV))  +
+                nvec[k]*(P-S)/2 * log(tr(Slist[[k]]) - tr(VSV))
+        }
+        obj
+    }
+    print(F(V))
+    ## dF(X)/dX
+    dF <- function(V) {
+
+        ## Subsample to get stochastic gradientn
+        SlistSub <- lapply(Ylist, function(Y) {
+            nk <- nrow(Y)
+            indices <- sample(1:nk, round(nk*0.9))
+            Ysub <- Y[indices, ]
+            
+            t(Ysub) %*% Ysub
+        })
+        
+        G <- 0
+        for(k in 1:length(SlistSub)) {
+
+            VSV <- t(V) %*% SlistSub[[k]] %*% V
+            VSVinv <- solve(VSV)
+            
+            G <- G +
+                nvec[k]/2 * (2*VSVinv - diag(diag(VSVinv))) %*% t(V) %*% SlistSub[[k]]
+            + nvec[k] * (P - S)/2 * diag(-1/(tr(SlistSub[[k]]) - tr(VSV)), S) %*% t(V) %*% SlistSub[[k]]
+
+            
+        }
+        t(G)
+    }
+
+    
+    eta <- 0.1
+    iter <- 1
+    Vprev <- rustiefel(P, S)
+    Fprev <- Inf
+    Fcur <- F(V)
+    Ccur <- Fcur
+    Gcur <- dF(V)
+    Gprev <- Gcur
+
+    Qcur <- 1
+    tau <- 0.1
+    ##while(Fcur/Fprev < 1-1e-15 & iter < maxIters) {
+     while(iter < maxIters) {
+
+        if(verbose) {
+            print(sprintf("Iteration %i: %f", iter, Fprev))
+        }
+        
+        Fprev <- Fcur
+        ##newV <- lineSearchBB(P, S, V, Vprev, Gcur, Gprev, F, rho=0.01, Ccur)
+        ##newV <- lineSearch(P, S, V, Gcur, F, rho1=0.01, rho2=0.9, tauStart=1)
+        newV <- takeStep(S, V, Gcur, tau)
+        if(iter %% 100 == 0)
+            tau <- tau/2
+         
+        ## Update
+        Vprev <- V
+        V <- newV
+        Fcur <- F(V)
+        Gprev <- Gcur
+        Gcur <- dF(V)
+
+        Qprev <- Qcur
+        Qcur <- eta*Qcur + 1
+        
+        Ccur <- (eta*Qprev*Ccur + Fcur) / Qcur
+        
+        iter <- iter + 1
+    }
+
+    V
+}
+
+takeStep <- function(p, X, G, tau) {
+
+    A <- G %*% t(X) - X %*% t(G)
+    U <- cbind(G, X)
+    V <- cbind(X, -1*G)
+
+    
+    HV <- solve(diag(2*p) + tau/2 * t(V) %*% U) %*% t(V)
+    Ytau <- X - tau * U %*% (HV %*% X)
 }
