@@ -2,18 +2,15 @@
 ## psi_k has dimension R + Q <= S, where Q eigenvectors are common
 ## and R eigenvectors vary across groups. 
 ##
-## Slist: a list of p x p matrices corresponding to Y^TY
+## Ylist: a list of n x p data matrices
 ## init: a list containing initial V, U's, Omega's,
 ## nvec: vector of number of samples per group
 
-fitSubspace <- function(P, S, R, Q=S-R, Slist, nvec, ngroups=length(Slist),
+fitSubspace <- function(P, S, R, Q=S-R, Ylist, nvec, ngroups=length(Ylist),
                         niters=100, nskip=1, init=NULL, binaryO=FALSE,
                         verbose=TRUE, sigmaTruthList=NULL, draw=c(),
-                        saveU=FALSE,
-                        printLoss=FALSE,
-                        Vmode="hmc") {
+                        printLoss=FALSE) {
     
-
     niters <- niters
     nskip <- nskip
     nsamps <- floor(niters/nskip)
@@ -21,13 +18,7 @@ fitSubspace <- function(P, S, R, Q=S-R, Slist, nvec, ngroups=length(Slist),
     if(R + Q > S)
         stop("R + Q must be less than S")
     
-
-    if(saveU)
-        Usamps <- array(dim=c(P, RQ, ngroups, nsamps))
-    else
-        Usamps <- NULL
     Osamps <- array(dim=c(S, R + Q, ngroups, nsamps))
-    Vsamps <- array(dim=c(P, S, nsamps))
     omegaSamps <- array(dim=c(R + Q, ngroups, ncol=nsamps))
     s2samps <- matrix(nrow=ngroups, ncol=nsamps)
 
@@ -68,53 +59,38 @@ fitSubspace <- function(P, S, R, Q=S-R, Slist, nvec, ngroups=length(Slist),
         stop("Some parameters unintialized!")
     }
 
-    sigmaTruthInvList <- NULL
-    if(!is.null(sigmaTruthList)) {
-        sigmaTruthInvList <- list()
-        for(k in 1:ngroups) {
-            sigmaTruthInvList[[k]] <- solve(sigmaTruthList[[k]])
-        }
-    }
-    
     V <- init$V
     Ulist <- init$Ulist
     Olist <- lapply(Ulist, function(u) t(V) %*% u)
     OmegaList <- init$OmegaList
     s2vec <- init$s2vec
     
-    initSigmaList <- list()
+    YVlist <- list()
     for(k  in 1:ngroups) {
         omega <- OmegaList[[k]]
         Lambda <- diag((omega/(1-omega)))
-        initSigmaList[[k]] <-
-            init$s2vec[k] * (Ulist[[k]] %*% Lambda %*% t(Ulist[[k]]) + diag(P))
+
+        YVlist[[k]] <- Ylist[[k]] %*% V
     }
 
 
-    draw <- c(draw, V=TRUE, O=TRUE, s2=TRUE, omega=TRUE)
+    draw <- c(draw, O=TRUE, s2=TRUE, omega=TRUE)
     draw <- draw[unique(names(draw))]
     
     for ( i in 1:niters ) {
 
-        if(draw["V"])
-            V <- sampleV(Slist, Ulist, s2vec, OmegaList,
-                         V, method=Vmode)
-        
-        Ssum <- lapply(1:ngroups, function(k) Slist[[k]]/s2vec[k]) %>%
-            Reduce('+', .)
-
-        ## Sample common omega and common O
-        Uk <- Ulist[[1]]
-
         if(Q > 0) {
+
+            YVpooled <- lapply(1:ngroups, function(k) YVlist[[k]]/sqrt(s2vec[k])) %>%
+                Reduce('rbind', .)
+            
             ## common omega
-            Omega2 <- sampleOmega(Ssum, Uk[, (R+1):(R+Q)],
+            Omega2 <- sampleOmega(YVpooled, Ok[, (R+1):(R+Q)],
                                   1, sum(nvec[k]))
         
             ## Sample common O
-            O2 <- sampleO(Ssum, Uk[, (R+1):(R+Q)], 1,
-                          OmegaList[[k]][(R+1):(R+Q)],
-                          V[, (S-Q+1):S])
+            O2 <- sampleO(YVpooled, Ok[, (R+1):(R+Q)], 1,
+                          OmegaList[[k]][(R+1):(R+Q)])
         } else {
             Omega2 <- c()
             O2 <- matrix(nrow=0, ncol=0)
@@ -122,18 +98,15 @@ fitSubspace <- function(P, S, R, Q=S-R, Slist, nvec, ngroups=length(Slist),
         
         for ( k in 1:ngroups ) {
             
-            Uk <- V %*% Olist[[k]]
-                
-            
             ## Sample sigma^2_k
             if(draw["s2"])
-                s2vec[k] <- sampleSigma2(Slist[[k]], Uk, OmegaList[[k]], nvec[k])
+                s2vec[k] <- sampleSigma2(Ylist[[k]], YVlist[[k]], Olist[[k]], OmegaList[[k]], nvec[k])
 
             
             ## Sample omegas_k, don't requrie ordered
             if(draw["omega"]) {
 
-                Omega1 <- sampleOmega(Slist[[k]], Uk[, 1:R],
+                Omega1 <- sampleOmega(YVlist[[k]], Ok[, 1:R],
                                          s2vec[k], nvec[k])
 
                 OmegaList[[k]] <- c(Omega1, Omega2)
@@ -142,37 +115,32 @@ fitSubspace <- function(P, S, R, Q=S-R, Slist, nvec, ngroups=length(Slist),
                 ## Sample O_k
             if(draw["O"]) {
                 
-                O1 <- sampleO(Slist[[k]], Uk[, 1:R], s2vec[k],
-                                  (OmegaList[[k]])[1:R], V[, 1:(S-Q)])
+                O1 <- sampleO(YVlist[[k]], Ok[, 1:R], s2vec[k],
+                                  (OmegaList[[k]])[1:R])
                                   
                 Ok <- as.matrix(bdiag(O1, O2))
             }
 
             
             Olist[[k]] <- Ok
-            Ulist[[k]] <- V %*% Ok
             
             ## save samples        
             if(i %% nskip==0) {
-                if(saveU)
-                    Usamps[, , k, i/nskip] <- Ulist[[k]]
 
-                Osamps[, , k, i/nskip] <- t(V) %*% Ulist[[k]]
-                
+                Osamps[, , k, i/nskip] <- Olist[[k]]
                 omegaSamps[, k, i/nskip] <- OmegaList[[k]]
                 s2samps[k, i/nskip] <- s2vec[k]
             }
             
         }
 
-        if (i%%nskip==0) {
-            Vsamps[, , i/nskip] <- V
+        if (i %% nskip==0) {
             if(verbose & !printLoss)
                 print(sprintf("Iteration %i", i))
         }
         
-        if(i%%nskip==0 & verbose & printLoss) {
-            
+        if(i %% nskip==0 & verbose & printLoss) {
+            stop("Needs updating")
             sl <- 0
             if(is.null(sigmaTruthInvList)) {
                 ## Print loss relative to starting point
@@ -203,8 +171,8 @@ fitSubspace <- function(P, S, R, Q=S-R, Slist, nvec, ngroups=length(Slist),
         }
     }
 
-    list(S=S, R=R, Q=Q, V=V, init=init, ngroups=ngroups, Usamps=Usamps,
-         Osamps=Osamps, Vsamps=Vsamps, omegaSamps=omegaSamps, s2samps=s2samps)
+    list(S=S, R=R, Q=Q, V=V, init=init, ngroups=ngroups, Osamps=Osamps,
+         omegaSamps=omegaSamps, s2samps=s2samps)
 }
 
 ## bayesian single group estimation

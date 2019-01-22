@@ -9,13 +9,17 @@
 library(rstiefel)
 library(mvtnorm)
 library(rstiefel)
-source("helper.R")
+
+scriptDir <- dirname(sys.frame(1)$ofile)
+source(sprintf("%s/helper.R", scriptDir))
 
 generateData <- function(P=200, S=10, R=S, Q=S-R, ngroups=10,
                          nvec=rep(100, ngroups),
                          V=rbind(diag(S), matrix(0, nrow=P-S, ncol=S)),
                          s2vec=rep(1, ngroups), LambdaList=NULL,
-                         Olist=NULL) {
+                         Olist=NULL,
+                         saveSigmaList = TRUE,
+                         saveSList = TRUE) {
 
     if(Q + R != S)
         stop("Q + R must be equal S")
@@ -43,6 +47,8 @@ generateData <- function(P=200, S=10, R=S, Q=S-R, ngroups=10,
     LambdaShared <- sort(rexp(Q, 1/10), decreasing=TRUE)
     for ( k in 1:ngroups ) {
 
+        print(k)
+        
         if( is.null(Olist[[k]]) ) {
             print(k)
             ## Generate Ok
@@ -53,7 +59,7 @@ generateData <- function(P=200, S=10, R=S, Q=S-R, ngroups=10,
 
 
         if( is.null(LambdaList[[k]]) ){
-            LambdaDiff <- sort(rexp(R, 1/10), decreasing=TRUE)
+            LambdaDiff <- sort(rexp(R, 1/4), decreasing=TRUE)
             LambdaList[[k]] <- c(LambdaDiff, LambdaShared)
         }
 
@@ -64,15 +70,24 @@ generateData <- function(P=200, S=10, R=S, Q=S-R, ngroups=10,
         OmegaList[[k]] <- Lamk/(Lamk+1)
 
         LamMat <- diag(Lamk, nrow=length(Lamk), ncol=length(Lamk))
-        SigmaList[[k]] <- s2vec[k]*(Uk %*% LamMat %*% t(Uk) + diag(P))
+
+        if(saveSigmaList)
+            SigmaList[[k]] <- s2vec[k]*(Uk %*% LamMat %*% t(Uk) + diag(P))
+        else
+            SigmaList <- NULL
 
         ## Generate sample covariance matrix and save
         
-        Y <- rmvnorm(n=nvec[k], sigma=SigmaList[[k]])
-        ## Y <- sqrt(s2vec[k])*(matrix(rnorm(nvec[k]*P), nrow=nvec[k], ncol=P) %*% V %*% Ok %*% sqrt(LamMat) %*% t(Ok) %*% t(V) + matrix(rnorm(nvec[k]*P), nrow=nvec[k], ncol=P))
-        Ylist[[k]] <- Y
-        Slist[[k]] <- t(Y) %*% Y
+        #Y <- rmvnorm(n=nvec[k], sigma=SigmaList[[k]])
 
+        Z <- matrix(rnorm(P * nvec[k]), nrow=nvec[k], ncol=P) %*% Uk %*% sqrt(LamMat) %*% t(Uk)
+        Y <- s2vec[k]*(Z + matrix(rnorm(P * nvec[k]), nrow=nvec[k], ncol=P))
+
+        Ylist[[k]] <- Y
+        if(saveSList)
+            Slist[[k]] <- t(Y) %*% Y
+        else
+            Slist <- NULL
     }
 
     list(V=V, Slist=Slist, Ylist=Ylist, Ulist=Ulist, Olist=Olist,

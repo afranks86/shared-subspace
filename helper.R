@@ -35,41 +35,6 @@ createNormMatrix <- function(eigenlist, vindices, type="H") {
     return(normsMat)
 }
 
-getGenderStat <- function(normsMat ) {
-
-    withinGender <- c(as.vector(normsMat[1:6, 1:6]), as.vector(normsMat[7:12, 7:12]))
-    betweenGender <- normsMat[1:6, 7:12]
-
-    median(withinGender, na.rm=TRUE)-median(betweenGender)
-
-    
-}
-
-getAgeStat <- function(normsMat) {
-
-    ages <- unique(X$Age)
-    ageStats <- list()
-    ageDiff <- c()
-    
-    UL <- normsMat[1:6, 1:6]
-    LR <- normsMat[7:12, 7:12]
-    for( i in 1:5 ) {
-
-        ageStats[[i]] <- c(UL[row(UL)==(col(UL)-i)], 
-                           (LR)[row(LR)==(col(LR)-i)])
-        ageDiff <- c(ageDiff, rep(diff(ages, lag=i), 2))
-    }
-
-    Yage <- unlist(ageStats)
-    Xage <- ageDiff
-    
-    ## return slope of norms against age
-    slope <- coef(lm(formula = Yage ~ Xage))[2]
-
-    list(slope=slope, ages=Xage, norms=Yage)
-
-}
-
 posteriorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups,
                           probRegion=0.95, hline=NULL, col=NULL,
                           pch=NULL, lty=NULL, ymax=30, logRatio=FALSE,
@@ -77,7 +42,7 @@ posteriorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups,
 
     ngroups <- length(groups)
     
-    if(is.null(col)){
+    if(ips.null(col)){
         col <- 1:ngroups
     }
     if(is.null(pch)){
@@ -174,11 +139,15 @@ getHullPoints <- function(nsamps, OmegaSamps, Osamps, logRatio=FALSE,
 
 ## Sample from 1/sigma^2
 
-sampleSigma2 <- function(S, U, omega, n, nu0=1, s20=1) {
+sampleSigma2 <- function(Y, YV, O, omega, n, nu0=1, s20=1) {
 
-    p <- nrow(S)
+    YU <- YV %*% O
+    
+    p <- ncol(Y)
     a <- ( nu0 + n*p)/2
-    b <- ( nu0*s20 + tr(S - (S %*% U) %*% (diag(omega, nrow=length(omega)) %*% t(U))) )/2
+
+    b <- ( nu0*s20 + sum(Y^2) - tr(t(YU) %*% YU %*% diag(omega, nrow=length(omega))))/2
+    
     1/rgamma(1, a, b)
 }
 
@@ -272,10 +241,11 @@ rebeta<-function(n, a, b, cc, interval=c(0, 1), MH=1000) {
     w
 }
 
-sampleOmega <- function(SC, U, s2, n, a=1, b=1) {
+sampleOmega <- function(YV, O, s2, n, a=1, b=1) {
 
-    R <- ncol(U)
-    cvec <- diag( t(U) %*% SC %*% U/(2*s2) )
+    YVO <- YV %*% O
+    R <- ncol(O)
+    cvec <- diag( t(YVO) %*% YVO /(2*s2) )
     omega <- numeric(R)
 
     for(r in 1:R) {
@@ -309,11 +279,9 @@ rsomega_gibbs <- function(S, U, s2, n, omega, a=1, b=1) {
 
 ## Shared subspace Sampling
 ## phi is the prior concentration
-sampleO <- function(SC, U, s2, omega, V) {
+sampleO <- function(YV, O, s2, omega) {
 
-    O <- t(V) %*% U
-
-    A <- t(V) %*% (SC/(2*s2)) %*% V 
+    A <- t(YV) %*% YV / (2*s2)
     B <- diag(omega, nrow=length(omega))
 
     ord <- order(omega, decreasing=TRUE)
@@ -926,7 +894,7 @@ R.rbmf.vector.mises <- function(Atilde, Ctilde, xinit) {
 ##############################################################
 
 
-subspaceEM <- function(Slist, P, S, R=S, Q=S-R, nvec, rho1=0.1, rho2=0.9,
+subspaceEM <- function(Ylist, P, S, R=S, Q=S-R, nvec, rho1=0.1, rho2=0.9,
                        Vstart=NULL, stiefelAlgo=1, lambda=0,
                        maxIters=10,
                        verbose=FALSE) {
@@ -938,8 +906,8 @@ subspaceEM <- function(Slist, P, S, R=S, Q=S-R, nvec, rho1=0.1, rho2=0.9,
         for(k in 1:length(PhiList)) {
             VY <- t(V) %*% t(Ylist[[k]])
             obj <- obj +
-                1/2 * tr(  t(V) %*% Slist[[k]] %*% V %*% PhiList[[k]] ) -
-                1/2 * PrecVec[k] * tr(t(V) %*% Slist[[k]] %*% V)
+                1/2 * tr(  VY %*% t(VY) %*% PhiList[[k]] ) -
+                1/2 * PrecVec[k] * tr(VY %*% t(VY))
         }
         obj + lambda*sum(abs(V))
     }
@@ -949,8 +917,9 @@ subspaceEM <- function(Slist, P, S, R=S, Q=S-R, nvec, rho1=0.1, rho2=0.9,
         G <- 0
         for(k in 1:length(PhiList)) {
 
-            G <- G + Slist[[k]] %*%  (V %*%  PhiList[[k]])  -
-                PrecVec[k] * Slist[[k]] %*%  V 
+            G <- G + t(Ylist[[k]]) %*% ((Ylist[[k]] %*% V) %*% PhiList[[k]]) -
+                (PrecVec[k] * t(Ylist[[k]])) %*%  (Ylist[[k]] %*% V)
+
         }
         G + lambda*sign(V)
     }
@@ -965,31 +934,33 @@ subspaceEM <- function(Slist, P, S, R=S, Q=S-R, nvec, rho1=0.1, rho2=0.9,
     convCheck <- Inf
     iter <- 0
     while(convCheck > 1e-6 & iter < maxIters ) {
-
         ## ---------- E-step -----------
-
+        
         ## E[ 1/sigma^2 * (psi+I)^(-1) | V]
         PhiList <- list()
-        V1 <- Vnew[, 1:(S-Q)]
+        V1 <- Vnew[, 1:(S-Q)] 
         if(Q > 0) {
             V2 <- Vnew[, (S-Q+1):S]
-            Ssum <- Reduce('+', Slist)
-            PhiShared <- solve(t(V2) %*% Ssum %*% V2) * (sum(nvec) + Q +1 )
+            V2Yk <- lapply(Ylist, function(x) t(V2) %*% t(x))
+            V2Ssum <- Reduce('+', lapply(V2Yk, function(x) x %*% t(x)))
+            PhiShared <- solve(V2Ssum * (sum(nvec) + Q + 1 ))
         } else{
             V2 <- matrix(nrow=nrow(V1), ncol=0)
             PhiShared <- matrix(nrow=0, ncol=0)
         }
         
-        for(k in 1:length(Slist)) {
-            PsiK <- solve(t(V1) %*% Slist[[k]] %*% V1) * (nvec[k] + (S-Q) +1 )
+        for(k in 1:length(Ylist)) {
+
+            V1Y <- t(V1) %*% t(Ylist[[k]])
+            PsiK <- solve(V1Y %*% t(V1Y)) * (nvec[k] + (S-Q) +1)
             PhiList[[k]] <- as.matrix(bdiag(PsiK, PhiShared))
         }
 
         ## E[ 1/sigma^2  | V]
         PrecVec <- c()
-        for(k in 1:length(Slist)) {
+        for(k in 1:length(Ylist)) {
             PrecVec[k] <- (nvec[k] * (P - S) + 2) /
-                (tr(Slist[[k]]) - tr( t(Vnew) %*% Slist[[k]] %*% Vnew ))
+                (sum(Ylist[[k]]^2) - tr((t(Vnew) %*% t(Ylist[[k]])) %*% (Ylist[[k]] %*% Vnew )))
         }
 
         ## Objective function to optimize in M-step
@@ -999,7 +970,6 @@ subspaceEM <- function(Slist, P, S, R=S, Q=S-R, nvec, rho1=0.1, rho2=0.9,
         ## ------- M-step -----------
 
         if(stiefelAlgo == 1) {
-
             Vnew <- optStiefel(F_t, dF_t, Vinit=Vstart, method="curvilinear",
                                searchParams = NULL, verbose=verbose)
         } else {
@@ -1039,7 +1009,7 @@ sumFirstP <- function(M, n, p, rho1=0.1, rho2=0.9, tol=1-1e-6) {
         
         tau <- 1
         X <- lineSearch(n, p, X, G, F, rho1, rho2, tau)
-
+p
         G <- -2*M %*% X
 
         print(sprintf("Objective is %f", F(X)))
