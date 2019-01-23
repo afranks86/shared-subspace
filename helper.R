@@ -259,24 +259,6 @@ sampleOmega <- function(YV, O, s2, n, a=1, b=1) {
     omega
 }
 
-## If we want to maintain order of eigenvalues
-rsomega_gibbs <- function(S, U, s2, n, omega, a=1, b=1) {
-
-    R<-ncol(U) ; c<-diag( t(U)%*%S%*%U/(2*s2) )
-    for(r in 1:R) {
-        lb<-omega[r+1] ; if (is.na(lb)){ lb<-0 }
-        ub<-omega[r-1] ; if (length(ub)==0){ ub<-1 }
-        if(any(is.na(c(lb, ub))))
-            browser()
-        omega[r]<-rebeta(1, a, b+n/2, c[r], c(lb, ub))
-        
-        if(is.na(omega[r])){
-            omega[r]<-runif(1, lb, ub)
-        }
-    }
-    omega
-}
-
 ## Shared subspace Sampling
 ## phi is the prior concentration
 sampleO <- function(YV, O, s2, omega) {
@@ -896,7 +878,7 @@ R.rbmf.vector.mises <- function(Atilde, Ctilde, xinit) {
 
 subspaceEM <- function(Ylist, P, S, R=S, Q=S-R, nvec, rho1=0.1, rho2=0.9,
                        Vstart=NULL, stiefelAlgo=1, lambda=0,
-                       maxIters=10,
+                       max_EM_iters=10,
                        verbose=FALSE) {
 
 
@@ -933,9 +915,9 @@ subspaceEM <- function(Ylist, P, S, R=S, Q=S-R, nvec, rho1=0.1, rho2=0.9,
 
     convCheck <- Inf
     iter <- 0
-    while(convCheck > 1e-6 & iter < maxIters ) {
+    while(convCheck > 1e-6 & iter < max_EM_iters ) {
         ## ---------- E-step -----------
-        
+
         ## E[ 1/sigma^2 * (psi+I)^(-1) | V]
         PhiList <- list()
         V1 <- Vnew[, 1:(S-Q)] 
@@ -943,7 +925,7 @@ subspaceEM <- function(Ylist, P, S, R=S, Q=S-R, nvec, rho1=0.1, rho2=0.9,
             V2 <- Vnew[, (S-Q+1):S]
             V2Yk <- lapply(Ylist, function(x) t(V2) %*% t(x))
             V2Ssum <- Reduce('+', lapply(V2Yk, function(x) x %*% t(x)))
-            PhiShared <- solve(V2Ssum * (sum(nvec) + Q + 1 ))
+            PhiShared <- solve(V2Ssum) * (sum(nvec) + Q + 1 )
         } else{
             V2 <- matrix(nrow=nrow(V1), ncol=0)
             PhiShared <- matrix(nrow=0, ncol=0)
@@ -954,8 +936,9 @@ subspaceEM <- function(Ylist, P, S, R=S, Q=S-R, nvec, rho1=0.1, rho2=0.9,
             V1Y <- t(V1) %*% t(Ylist[[k]])
             PsiK <- solve(V1Y %*% t(V1Y)) * (nvec[k] + (S-Q) +1)
             PhiList[[k]] <- as.matrix(bdiag(PsiK, PhiShared))
-        }
 
+        }
+        
         ## E[ 1/sigma^2  | V]
         PrecVec <- c()
         for(k in 1:length(Ylist)) {
