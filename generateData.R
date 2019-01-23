@@ -17,9 +17,7 @@ generateData <- function(P=200, S=10, R=S, Q=S-R, ngroups=10,
                          nvec=rep(100, ngroups),
                          V=rbind(diag(S), matrix(0, nrow=P-S, ncol=S)),
                          s2vec=rep(1, ngroups), LambdaList=NULL,
-                         Olist=NULL,
-                         saveSigmaList = TRUE,
-                         saveSList = TRUE) {
+                         Olist=NULL) {
 
     if(Q + R != S)
         stop("Q + R must be equal S")
@@ -71,11 +69,6 @@ generateData <- function(P=200, S=10, R=S, Q=S-R, ngroups=10,
 
         LamMat <- diag(Lamk, nrow=length(Lamk), ncol=length(Lamk))
 
-        if(saveSigmaList)
-            SigmaList[[k]] <- s2vec[k]*(Uk %*% LamMat %*% t(Uk) + diag(P))
-        else
-            SigmaList <- NULL
-
         ## Generate sample covariance matrix and save
         
         #Y <- rmvnorm(n=nvec[k], sigma=SigmaList[[k]])
@@ -84,15 +77,12 @@ generateData <- function(P=200, S=10, R=S, Q=S-R, ngroups=10,
         Y <- s2vec[k]*(Z + matrix(rnorm(P * nvec[k]), nrow=nvec[k], ncol=P))
 
         Ylist[[k]] <- Y
-        if(saveSList)
-            Slist[[k]] <- t(Y) %*% Y
-        else
-            Slist <- NULL
+
     }
 
-    list(V=V, Slist=Slist, Ylist=Ylist, Ulist=Ulist, Olist=Olist,
-         OmegaList=OmegaList, LambdaList=LambdaList, SigmaList=SigmaList,
-         s2vec=s2vec, S=S, R=R, Q=Q, P=P, ngroups=ngroups, nvec=nvec)
+    list(V=V, Ylist=Ylist, Ulist=Ulist, Olist=Olist,
+         OmegaList=OmegaList, LambdaList=LambdaList, s2vec=s2vec,
+         S=S, R=R, Q=Q, P=P, ngroups=ngroups, nvec=nvec)
     
 }
 
