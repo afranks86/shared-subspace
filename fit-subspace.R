@@ -85,12 +85,12 @@ fitSubspace <- function(P, S, R, Q=S-R, Ylist, nvec, ngroups=length(Ylist),
                 Reduce('rbind', .)
             
             ## common omega
-            Omega2 <- sampleOmega(YVpooled, Ok[, (R+1):(R+Q)],
-                                  1, sum(nvec[k]))
-        
+            Omega2 <- sampleOmega(YVpooled[, (R+1):(R+Q)], Olist[[k]][(R+1):(R+Q), (R+1):(R+Q)],
+                                  1, sum(nvec))
+            
             ## Sample common O
-            O2 <- sampleO(YVpooled, Ok[, (R+1):(R+Q)], 1,
-                          OmegaList[[k]][(R+1):(R+Q)])
+            O2 <- sampleO(YVpooled[, (R+1):(R+Q)], Ok[(R+1):(R+Q), (R+1):(R+Q)], 1,
+                          Omega2)
         } else {
             Omega2 <- c()
             O2 <- matrix(nrow=0, ncol=0)
@@ -106,7 +106,7 @@ fitSubspace <- function(P, S, R, Q=S-R, Ylist, nvec, ngroups=length(Ylist),
             ## Sample omegas_k, don't requrie ordered
             if(draw["omega"]) {
 
-                Omega1 <- sampleOmega(YVlist[[k]], Ok[, 1:R],
+                Omega1 <- sampleOmega(YVlist[[k]], Olist[[k]][, 1:R],
                                          s2vec[k], nvec[k])
 
                 OmegaList[[k]] <- c(Omega1, Omega2)
@@ -115,7 +115,7 @@ fitSubspace <- function(P, S, R, Q=S-R, Ylist, nvec, ngroups=length(Ylist),
                 ## Sample O_k
             if(draw["O"]) {
                 
-                O1 <- sampleO(YVlist[[k]], Ok[, 1:R], s2vec[k],
+                O1 <- sampleO(YVlist[[k]][, 1:R], Olist[[k]][1:R, 1:R], s2vec[k],
                                   (OmegaList[[k]])[1:R])
                                   
                 Ok <- as.matrix(bdiag(O1, O2))
@@ -126,7 +126,6 @@ fitSubspace <- function(P, S, R, Q=S-R, Ylist, nvec, ngroups=length(Ylist),
             
             ## save samples        
             if(i %% nskip==0) {
-
                 Osamps[, , k, i/nskip] <- Olist[[k]]
                 omegaSamps[, k, i/nskip] <- OmegaList[[k]]
                 s2samps[k, i/nskip] <- s2vec[k]
