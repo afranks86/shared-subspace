@@ -60,7 +60,7 @@ generateData <- function(P=200, S=10, R=S, Q=S-R, ngroups=10,
             LambdaDiff <- sort(rexp(R, 1/4), decreasing=TRUE)
             LambdaList[[k]] <- c(LambdaDiff, LambdaShared)
         }
-        browser()
+
         Ok <- Olist[[k]]
         Uk <- V %*% Ok
         Ulist[[k]] <- Uk
