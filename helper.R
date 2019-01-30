@@ -42,7 +42,7 @@ posteriorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups,
 
     ngroups <- length(groups)
     
-    if(ips.null(col)){
+    if(is.null(col)){
         col <- 1:ngroups
     }
     if(is.null(pch)){
@@ -151,112 +151,26 @@ sampleSigma2 <- function(Y, YV, O, omega, n, nu0=1, s20=1) {
     1/rgamma(1, a, b)
 }
 
-## Unormalized eigenvalues
-debeta_un <- function(w, a, b, cc, log=FALSE) {
+## trucnated gamma
+tgamma <- function(a, b) {
 
-    log_debeta_un <- function(w, a, b, cc) {
-        (a-1)*log(w) + (b-1)*log(1-w) + cc*w
-    }
-    
-    if(a==1) {
-        if(cc > b-1)
-            maxw <- (cc-b+1)/cc
-        else
-            maxw <- .Machine$double.eps
-    } else{
-        maxw <- optimize(function(w) log_debeta_un(w, a, b, cc),
-                         interval=c(0,1), maximum=TRUE)$maximum
-    }
+    M <- 1/pgamma(1, a, b)
+    qgamma(runif(length(a))/M, a, b)
 
-    x <- log_debeta_un(w, a, b, cc) - log_debeta_un(maxw, a, b, cc)
-
-    if(!log){
-        x <- exp(x)
-    }
-
-    x
 }
 
-## normalizing constant
-debeta_nc <- function(a, b, cc) {
-    1/(integrate(debeta_un, 0, 1, a=a, b=b, cc=cc)$val)
-}
-
-## normalized
-debeta <- function(w, a, b, c){
-    debeta_un(w, a, b, c)*debeta_nc(a, b, c)
-}
-
-pebeta<-function(w, a, b, cc) {
-    dint<- function(w, a, b, cc) {
-        int <- 0
-        if(w > 0) {
-            int <- integrate(debeta_un, 0, w, a, b, cc,
-                             rel.tol=1e-16,
-                             subdivisions=200L,
-                             stop.on.error=FALSE)$value
-        }
-        int
-    }
-
-    nc <- dint(1, a, b, cc)
-
-    pmin(sapply(w, dint, a, b, cc)/nc, 1)
-}
-
-qebeta<-function(p, a, b, cc) {
-
-    f <- function(w, p, a, b, cc){ p - pebeta(w, a, b, cc) }
-    w <- p*0
-    for(i in 1:length(p)) {
-        w[i] <- uniroot(f, interval=c(1e-10, 1-1e-10), p[i], a, b, cc)$root
-    }
-    w
-}
-
-rebeta<-function(n, a, b, cc, interval=c(0, 1), MH=1000) {
-
-    uinterval <- sort( pebeta(interval, a, b, cc) )
-    if(uinterval[1] < uinterval[2] ) {
-        u <- runif(n,  uinterval[1],   uinterval[2])
-        w <- qebeta(u, a, b, cc)
-    }
-    if(uinterval[1] == uinterval[2] ) {
-        w <- runif(n, interval[1], interval[2])
-    }
-
-    w[w >= interval[2]] <- interval[2] - 1e-6
-    w[w <= interval[1]] <- interval[1] + 1e-6
-
-    for(s in seq(1, MH, length=MH)) {
-        wp <- pmin(1-1e-6, pmax(0+1e-6, w+runif(n, -1e-3, 1e-3) ))
-
-        lhr <- debeta_un(wp, a, b, cc, log=TRUE) -
-            debeta_un(w, a, b, cc, log=TRUE) -
-            log(interval[1] < wp | wp < interval[2])
-        lu <- log(runif(n))
-        w[lu < lhr] <- wp[lu < lhr]
-    }
-    
-    w
-}
-
-sampleOmega <- function(YV, O, s2, n, a=1, b=1) {
+sampleOmega <- function(YV, O, s2, n) {
 
     YVO <- YV %*% O
     R <- ncol(O)
     cvec <- diag( t(YVO) %*% YVO /(2*s2) )
-    omega <- numeric(R)
-
-    for(r in 1:R) {
-        if(cvec[r]==0) {
-            omega[r] <- rbeta(1, a, n/2+b)
-        } else {
-            omega[r] <- rebeta(1, a, b+n/2, cvec[r])
-        }
-    }
-
+    g <- tgamma(rep(n/2 + 1, length(cvec)), cvec/n)
+    g <- g/n
+    
+    omega <- 1 - g
+    
     omega
+
 }
 
 ## Shared subspace Sampling
@@ -878,7 +792,8 @@ R.rbmf.vector.mises <- function(Atilde, Ctilde, xinit) {
 
 subspaceEM <- function(Ylist, P, S, R=S, Q=S-R, nvec, rho1=0.1, rho2=0.9,
                        Vstart=NULL, stiefelAlgo=1, lambda=0,
-                       max_EM_iters=10,
+                       EM_iters=10,
+                       M_iters=100,
                        verbose=FALSE) {
 
 
@@ -915,7 +830,7 @@ subspaceEM <- function(Ylist, P, S, R=S, Q=S-R, nvec, rho1=0.1, rho2=0.9,
 
     convCheck <- Inf
     iter <- 0
-    while(convCheck > 1e-6 & iter < max_EM_iters ) {
+    while(convCheck > 1e-6 & iter < EM_iters ) {
         ## ---------- E-step -----------
 
         ## E[ 1/sigma^2 * (psi+I)^(-1) | V]
@@ -952,13 +867,9 @@ subspaceEM <- function(Ylist, P, S, R=S, Q=S-R, nvec, rho1=0.1, rho2=0.9,
         
         ## ------- M-step -----------
 
-        if(stiefelAlgo == 1) {
-            Vnew <- optStiefel(F_t, dF_t, Vinit=Vstart, method="curvilinear",
-                               searchParams = NULL, verbose=verbose)
-        } else {
-            Vnew <- optStiefel(F_t, dF_t, Vinit=Vstart, method="bb",
-                               searchParams = NULL, verbose=verbose)
-        }
+        Vnew <- optStiefel(F_t, dF_t, Vinit=Vstart, method="bb",
+                           maxIters= M_iters,
+                           searchParams = NULL, verbose=verbose)
 
         ## ---- Check for convergence ------
         
