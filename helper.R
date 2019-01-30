@@ -1,8 +1,9 @@
+library(rstiefel)
 library(mvtnorm)
 library(Matrix)
 library(magrittr)
 library(scales)
-source("~/course/rstiefel/R/opt.stiefel.R")
+
 
 ## stanstart <- stan(file="vectorBMF.stan", data=list(M=9,lam=rep(1,10), gamma=rep(1, 10)), chains=1, iter=1)
 
