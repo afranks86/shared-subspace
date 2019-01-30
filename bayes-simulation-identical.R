@@ -22,30 +22,13 @@ niters <- 1000
 nwarmup <- niters/2
 
 LambdaList <- Olist <- list()
-
-LambdaList[[1]] <- c(1000, 100)
-LambdaList[[2]] <- c(1000, 100)
-LambdaList[[3]] <- c(1000, 1000/3)
-LambdaList[[4]] <- c(1000, 1000/3)
-LambdaList[[5]] <- c(1000, 1000)
-
-Olist[[1]] <- matrix(c(sqrt(2)/2, sqrt(2)/2, -sqrt(2)/2, sqrt(2)/2), nrow=2)
-Olist[[2]] <- matrix(c(-sqrt(2)/2, sqrt(2)/2, sqrt(2)/2, sqrt(2)/2), nrow=2)
-Olist[[3]] <- matrix(c(-sqrt(2)/2, sqrt(2)/2, sqrt(2)/2, sqrt(2)/2), nrow=2)
-Olist[[4]] <- diag(2)
-Olist[[5]] <- diag(2)
-
 Opooled <- matrix(0, nrow=S, ncol=S)
-Opooled[1:2, 1:2] <- diag(2)
 if(R  < S) { 
-    Opooled[(R+1):S, (R+1):S] <- rustiefel(S-R, S-R)
-    LambdaPooled <- rexp(S - R, 1/500)
+    Opooled[1:S, 1:S] <- rustiefel(S, S)
+    LambdaPooled <- sort(rexp(S, 1/500), decreasing=TRUE)
     for(k in 1:ngroups) {
-        Ok <- matrix(0, nrow=S, ncol=S)
-        Ok[1:R, 1:R] <- Olist[[k]]
-        Ok[(R+1):S, (R+1):S] <- Opooled[(R+1):S, (R+1):S]
-        Olist[[k]] <- Ok
-        LambdaList[[k]] <- c(LambdaList[[k]], LambdaPooled)
+        Olist[[k]] <- Opooled
+        LambdaList[[k]] <- LambdaPooled
     }
 }
 
@@ -72,16 +55,10 @@ ngroups <- dat$ngroups
 nvec <- dat$nvec
 
 Vinit <- svd(do.call(cbind, lapply(1:ngroups, function(k) svd(t(dat$Ylist[[k]]))$u[, 1:S])))$u[, 1:S]
-
-## ulst <- lapply(1:ngroups, function(k) svd(t(dat$Ylist[[k]]))$u[, 1:S])
-
-## sapply(1:ngroups, function(n) max(abs(sapply(1:10, function(s) t(ulst[[1]][, 10]) %*% ulst[[n]][, s]))))
-
 Vinit <- Vinit %*% rustiefel(S, S)
 
-
 microbenchmark(EMFit <- subspaceEM(dat$Ylist, P=P, S=S, R=R, nvec=dat$nvec,
-                                   Vstart=Vinit, verbose=TRUE, EM_iters=10, M_iters=100, stiefelAlgo=2), times=1)
+                    Vstart=Vinit, verbose=TRUE, EM_iters=10, M_iters=300, stiefelAlgo=2), times=1)
 
 tr((t(dat$V) %*%  EMFit$V) %*% (t(EMFit$V) %*% dat$V)) / S
 tr((t(dat$V) %*%  Vinit) %*% (t(Vinit) %*% dat$V)) / S
@@ -108,9 +85,9 @@ samples <- fitSubspace(dat$P, S, R, Q=S-R, dat$Ylist,
                    niters=niters)
 
 
-save(samples, dat, file="bayes-simulations-1-19.RData")
+save(samples, dat, file="bayes-simulations-identical-2-19.RData")
 
-pdf("paper/Figs/posteriorRegions-chull.pdf", width=5, height=5, font="Times")
+pdf("paper/Figs/posteriorRegions-chull-identical.pdf", width=5, height=5, font="Times")
 
 attach(samples)
 
@@ -118,8 +95,6 @@ indices <- c(6:7)
 
 sv <- svd(t(EMFit$V[, indices]) %*% dat$V[, indices])
 Rot <- sv$v %*% t(sv$u)
-
-
 
 
 rotOsamps <- array(dim=c(length(indices), length(indices), ngroups, niters))

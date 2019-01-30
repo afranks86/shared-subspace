@@ -14,6 +14,7 @@ tr <- function(X) { sum(diag(X)) }
 ## e.g. compare trace (U_k^T U_J)^2
 ## SS = Shares space
 ## e.g. compare || U_k^T U_J || (frobenius)
+
 createNormMatrix <- function(eigenlist, vindices, type="H") {
     ngroups <- length(eigenlist)
     normsMat <- matrix(NA, nrow=ngroups, ncol=ngroups)
@@ -364,180 +365,6 @@ proposeBinaryO <- function(S, U, V, Sig, s2, omega, n, flipProb=0.1) {
 
 }
 
-
-R.rbmf.vector.gibbs <- function (A, c, x) {
-
-    evdA <- eigen(A, symmetric=TRUE)
-    E <- evdA$vec
-    l <- evdA$val
-    y <- t(E) %*% x
-    d <- t(E) %*% c
-    x <- E %*% R.ry_bmf(y, l, d, length(y))
-    x/sqrt(sum(x^2))
-
-}
-
-R.rbmf.vector.mh <- function (A, c, x) {
-
-    evdA <- eigen(A, symmetric=TRUE)
-    E <- evdA$vec
-    l <- evdA$val
-
-    cnorm <- c/sqrt(sum(c^2))
-    c %*% cnorm
-
-    Esigned <- E*sign(cnorm)*sign(E)
-    
-    mxVec <- which.max(c(c %*% cnorm + cnorm %*% A %*% cnorm, c %*% Esigned + l))
-    if(mxVec==1) {
-        x <- cnorm
-    } else{
-        x <- Esigned[, mxVec-1]
-    }
-
-    x
-}
-
-R.rbmf.vector.hmc <- function (A, c, x, iter=1000) {
-
-    evdA <- eigen(A)
-  
-    E <- evdA$vec
-    l <- evdA$val
-    l[l < 0] <- 0
-    y <- t(E) %*% x
-    d <- as.numeric( t(E) %*% c )
-  
-    sink("/dev/null");
-    results <- stan(fit=stanstart,
-                    data=list(M=length(y)-1, lam=l, gamma=d),
-                    chains=1, iter=iter)
-    sink()
-  
-    samps <- extract(results, permuted=FALSE)
-    samps <- samps[dim(samps)[1], 1, ]
-    y <- samps[grep("Y", names(samps))]
-    
-    x <- E %*% y
-    x/sqrt(sum(x^2))
-
-}
-
-
-
-R.ry_bmf <- function(y, l, d, n) {
-
-    k <-  (n-1)/2
-
-    for(i in sample(1:n)) {
-
-        omyi <- 1/(1-y[i]^2)
-        smyi <- sqrt(omyi)
-        a <- l[i]+l[i]*y[i]^2*omyi
-        b <- -1*y[i]*d[i]*smyi
-        for(j in 1:n) {
-            a <- a-l[j]*y[j]^2*omyi
-            b <- b+y[j]*d[j]*smyi
-        }
-##        print(y)
-##        print(i)
-##        print(l)
-        theta <- R.rtheta_bmf.mh(k, a, b, abs(d[i]))
-        if(theta==1e-16) {
-
-        }
-        
-        for(j in 1:n){
-            y[j] <- y[j]*sqrt(1-theta)*smyi
-        }
-        y[i] <- sqrt(theta)*(-1^(rbinom(1,1,1/(1+exp(2*sqrt(theta)*d[i]) ))) )
-    }
-    y
-    ##rstiefel::ry_bmf(y, l, d)
-}
-
-
-R.rtheta_bmf.mh <- function(k, a, b, cc, steps=50) {
-
-    f <- function(x) {
-        -1/2*log(x) + k*log(1-x) + a*x+b*sqrt(1-x) + sqrt(x)*cc +
-            log(1.0 + exp(-2*sqrt(x)*cc))
-    }
-
-    mode <- optimize(function(x) - f(x),
-                     lower=0, upper=1,
-                     tol=.Machine$double.eps)$minimum
-
-    if(f(1e-16) > f(mode)) {
-        mode <- 1e-16
-    }
-
-    fdoubleprime <- function(x) {
-        -b/(4*(1-x)^(3/2)) + cc^2/(x*(exp(cc*sqrt(x))+1)) - k/(1-x)^2 + 1/(2*x^2) - cc*tanh(cc*sqrt(x))/(4*x^(3/2) )
-        
-    }
-
-    dd <- fdoubleprime(mode)
-    if( dd >= 0 ) {
-        p <- 1/2
-        q <- 1## 1/(2*mode)-1/2
-    } else {
-        pplusq <- -1*mode*(1-mode)*dd-1
-        p <- mode*(pplusq-2)+1
-        if( p < 1 ) {
-            browser()
-            print("P < 1")
-            p <- 1
-            q <- (1-mode)/mode
-        } else {
-            q <- pplusq - p
-        }
-    }
-    
-    if(mode < 0.1) {
-        ##browser()
-    }
-
-    lprop <- function(x) { dbeta(x, p, q, log=TRUE) }
-    thCur <- mode
-    reject <- 0
-    for(i in 1:steps) {
-
-        th <- rbeta(1, p, q)
-
-        log.mh <- f(th) - f(thCur) +
-            lprop(thCur) - lprop(th)
-        
-        if( log.mh > 0 ) {
-            thCur <- th
-        } else {
-            u <- runif(1,0,1)
-            if ( log(u) < log.mh ) {
-                thCur <- th
-            } else {
-                reject <- reject+1
-            }
-        }
-    }
-
-    if( reject==steps ) {
-        print("ALL REJECTS")
-        ## dn <- function(x) dnorm(x, mode, sd=sqrt(-1/dd), log=TRUE)
-        ## print(mode)
-        ## curve(f(x), from=0, to=0.001)
-        ## curve(lprop(x)-(lprop(mode)-f(mode)), col="red", add=TRUE)
-        ## lprop2 <- function(x) { dnorm(x, mean=mode, sd=sqrt(-1/dd), log=TRUE) }
-        ## curve(lprop2(x)-(lprop2(mode)-f(mode)), col="green", add=TRUE)
-        ## curve(-1/2*log(x) - (-1/2*log(1e-5)-f(1e-5)), from=0, to=0.001, col="red", add=TRUE)
-        thCur <- mode
-        
-    }
-
-  ##print(reject/steps)
-    
-    thCur
-}
-
 steinsLoss <- function(C1, C2inv) {
 
     sum(diag(C1 %*% C2inv)) - log(det(C1 %*% C2inv)) - nrow(C1)
@@ -758,33 +585,6 @@ sampleV2 <- function(Slist, Ulist, s2vec, OmegaList, V, method="gibbs") {
     V
 }
 
-R.rbmf.vector.mises <- function(Atilde, Ctilde, xinit) {
-
-    xcur <- xinit
-    reject <- 0
-    for(i in 1:50) {
-
-        xprop <- rmf.vector(kmu=xcur * 10000)
-        logMFprop <- Ctilde %*% xprop + t(xprop) %*% Atilde %*% xprop
-        logMFcur <- Ctilde %*% xcur + t(xcur) %*% Atilde %*% xcur
-        log.mh <- logMFprop - logMFcur
-
-        if( log.mh > 0 ) {
-            xcur <- xprop
-        } else {
-            u <- runif(1,0,1)
-            if ( log(u) < log.mh ) {
-                xcur <- xprop
-            } else {
-                reject <- reject+1
-            }
-        }
-    }
-
-    xcur
-    
-}
-
 ##############################################################
 ##############  Optimization on the Stiefel Manifold #########
 ##############  This is the M-step in the EM algo ############
@@ -835,13 +635,17 @@ subspaceEM <- function(Ylist, P, S, R=S, Q=S-R, nvec, rho1=0.1, rho2=0.9,
         ## ---------- E-step -----------
 
         ## E[ 1/sigma^2 * (psi+I)^(-1) | V]
+        PrecVec <- rep(1, length(Ylist))
         PhiList <- list()
         V1 <- Vnew[, 1:(S-Q)] 
         if(Q > 0) {
             V2 <- Vnew[, (S-Q+1):S]
-            V2Yk <- lapply(Ylist, function(x) t(V2) %*% t(x))
+            V2Yk <- lapply(1:length(Ylist), function(k) t(V2) %*% t(Ylist[[k]])*sqrt(PrecVec[k]))
             V2Ssum <- Reduce('+', lapply(V2Yk, function(x) x %*% t(x)))
-            PhiShared <- solve(V2Ssum) * (sum(nvec) + Q + 1 )
+            
+            ## Diag Q  to ensure inversion is stable
+            PhiShared <- solve(V2Ssum + diag(Q)) * (sum(nvec) + Q + 1)
+            
         } else{
             V2 <- matrix(nrow=nrow(V1), ncol=0)
             PhiShared <- matrix(nrow=0, ncol=0)
@@ -851,12 +655,11 @@ subspaceEM <- function(Ylist, P, S, R=S, Q=S-R, nvec, rho1=0.1, rho2=0.9,
 
             V1Y <- t(V1) %*% t(Ylist[[k]])
             PsiK <- solve(V1Y %*% t(V1Y)) * (nvec[k] + (S-Q) +1)
-            PhiList[[k]] <- as.matrix(bdiag(PsiK, PhiShared))
+            PhiList[[k]] <- as.matrix(bdiag(PsiK, 1/PrecVec[k]*PhiShared))
 
         }
         
         ## E[ 1/sigma^2  | V]
-        PrecVec <- c()
         for(k in 1:length(Ylist)) {
             PrecVec[k] <- (nvec[k] * (P - S) + 2) /
                 (sum(Ylist[[k]]^2) - tr((t(Vnew) %*% t(Ylist[[k]])) %*% (Ylist[[k]] %*% Vnew )))
@@ -914,110 +717,6 @@ p
     X
 }
 
-
 ##################################################3
 
 
-optimV3 <- function(Ylist, P, S, nvec, Vinit=NULL, rho=0.1,
-                    maxIters=50, verbose=FALSE, tauInit=2, subsetSize=0.3, lambda=0) {
-    
-    if(is.null(Vinit)) 
-        V <- rustiefel(P, S)
-    else
-        V <- Vinit## G <- G +
-            ##     nvec[k]/2 * (2*VSVinv - diag(diag(VSVinv))) %*% t(V) %*% Slist[[k]]
-            ## + nvec[k] * (P - S)/2 * diag(-1/(tr(Slist[[k]]) - tr(VSV)), S) %*% t(V) %*% Slist[[k]]
-
-    Slist <- lapply(Ylist, function(Y) t(Y) %*% Y)
-    ## Function to optimize
-    F <- function(V) {
-        obj <- 0
-        for(k in 1:length(Slist)) {
-            VSV <- t(V) %*% Slist[[k]] %*% V
-            obj <- obj + nvec[k]/2 * determinant(VSV)$modulus  +
-                nvec[k]*(P-S)/2 * log(tr(Slist[[k]]) - tr(VSV))
-        }
-        1/sum(nvec)*obj + lambda*sum(abs(V))
-    }
-
-    ## dF(X)/dX
-    dF <- function(V) {
-
-        ## Subsample to get stochastic gradientn
-        SlistSub <- lapply(Ylist, function(Y) {
-            nk <- nrow(Y)
-            indices <- sample(1:nk, round(nk*subsetSize))
-            Ysub <- Y[indices, ]
-            
-            t(Ysub) %*% Ysub
-        })
-        
-        G <- 0
-        for(k in 1:length(SlistSub)) {
-
-            VSV <- t(V) %*% SlistSub[[k]] %*% V
-            VSVinv <- solve(VSV)
-            
-            G <- G +
-                nvec[k]/2 * (2*VSVinv - diag(diag(VSVinv))) %*% t(V) %*% SlistSub[[k]]
-            + nvec[k] * (P - S)/2 * diag(-1/(tr(SlistSub[[k]]) - tr(VSV)), S) %*% t(V) %*% SlistSub[[k]] 
-
-        }
-        -1/sum(nvec)*t(G) - lambda*sign(V)
-    }
-
-    
-    eta <- 0.1
-    iter <- 1
-    Vprev <- rustiefel(P, S)
-    Fprev <- Inf
-    Fcur <- F(V)
-
-    Ccur <- Fcur
-    Gcur <- dF(V)
-    Gprev <- Gcur
-
-    Qcur <- 1
-    tau <- tauInit
-    ##while(Fcur/Fprev < 1-1e-15 & iter < maxIters) {
-     while(iter < maxIters) {
-
-        if(verbose) {
-            print(sprintf("Iteration %i: Obj=%f, Tau=%f", iter, Fprev, tau))
-        }
-        
-        Fprev <- Fcur
-        ## newV <- linreSearchBB(P, S, V, Vprev, Gcur, Gprev, F, rho=0.01, Ccur)
-        ##newV <- lineSearch(P, S, V, Gcur, F, rho1=0.01, rho2=0.9, tauStart=1)
-        newV <- takeStep(S, V, Gcur, tau)
-        if(iter %% 100 == 0)
-        tau <- tauInit * 1/(iter/100+1)
-         
-        ## Update
-        Vprev <- V
-        V <- newV
-        Fcur <- F(V)
-        Gprev <- Gcur
-        Gcur <- dF(V)
-
-        Qprev <- Qcur
-        Qcur <- eta*Qcur + 1
-        
-        Ccur <- (eta*Qprev*Ccur + Fcur) / Qcur
-        
-        iter <- iter + 1
-    }
-
-    V
-}
-
-takeStep <- function(p, X, G, tau) {
-
-    A <- G %*% t(X) - X %*% t(G)
-    U <- cbind(G, X)
-    V <- cbind(X, -1*G)
-    
-    HV <- solve(diag(2*p) + tau/2 * t(V) %*% U) %*% t(V)
-    Ytau <- X - tau * U %*% (HV %*% X)
-
-}

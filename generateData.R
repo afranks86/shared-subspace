@@ -8,10 +8,9 @@
 
 library(rstiefel)
 library(mvtnorm)
-library(rstiefel)
 
 scriptDir <- dirname(sys.frame(1)$ofile)
-source(sprintf("%s/helper.R", scriptDir))
+source(sprintf("%s/subspace-functions.R", scriptDir))
 
 generateData <- function(P=200, S=10, R=S, Q=S-R, ngroups=10,
                          nvec=rep(100, ngroups),
