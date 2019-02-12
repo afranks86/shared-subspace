@@ -12,21 +12,11 @@ library(colorspace)
 
 source("fit-subspace.R")
 source("generateData.R")
-source("helper.R")
-
-########################################################
-############# Data Generation #########################
-########################################################
-
-
-
-########################################################
-############# Data Fit #########################
-########################################################
+source("subspace-functions.R")
 
 nbench_times <- 10
-Svec <- c(2, 10)
-Pvec <- seq(from=1000, to=3000, by=1000)
+Svec <- c(2, 10, 25, 50)
+Pvec <- seq(from=1000, to=10000, by=1000)
 
 
 ## Initialize sampler
@@ -36,39 +26,44 @@ nvec <- dat$nvec
 benchmark_array <- array(dim=c(length(Svec), length(Pvec), nbench_times))
 for(sindex in 1:length(Svec)) {
     for(pindex in 1:length(Pvec)) {
-        
-        n <- 50
-        S <- Svec[sindex]
-        R <- S
-        P <- Pvec[pindex]
+        for(nt in 1:nbench_times) {
 
-        print(sprintf("P = %i, S = %i", P, S))
-        
-        ngroups <- 5
+            n <- 50
+            S <- Svec[sindex]
+            R <- S
+            P <- Pvec[pindex]
+            
+            print("------------------------------")
+            print(sprintf("P = %i, S = %i", P, S))
+            print("------------------------------")
+            
+            ngroups <- 5
 
-        niters <- 1000
-        nwarmup <- niters/2
+            niters <- 1000
+            nwarmup <- niters/2
 
-        dat <- generateData(P=P, S=S, R=S, ngroups=ngroups,
-                            nvec=rep(n, ngroups), saveSigmaList=FALSE, saveSList = FALSE)
+            dat <- generateData(P=P, S=S, R=S, ngroups=ngroups,
+                                nvec=rep(n, ngroups))
 
-        dat$genType <- "Shared subspace"
+            dat$genType <- "Shared subspace"
 
-        Ypooled <- c()
-        for(i in 1:length(dat$Ylist)){
-            Ypooled <- rbind(Ypooled, dat$Ylist[[i]])
+            Ypooled <- c()
+            for(i in 1:length(dat$Ylist)){
+                Ypooled <- rbind(Ypooled, dat$Ylist[[i]])
+            }
+            dat$Ypooled <- Ypooled
+
+            Vinit <- rustiefel(P, S)
+            benchmarked <- microbenchmark(EMFit <- subspaceEM(dat$Ylist, P=P, S=S, R=R, nvec=dat$nvec, Vstart=Vinit, verbose=FALSE, EM_iters=100, M_iters=50, stiefelAlgo=2), times=1)
+            Vinit <- EMFit$V
+
+            benchmark_array[sindex, pindex, nt] <- benchmarked$time/1e9
+            
         }
-        dat$Ypooled <- Ypooled
-        
-        Vinit <- svd(do.call(cbind, lapply(1:ngroups, function(k) svd(t(dat$Ylist[[k]]))$u[, 1:R])))$u[, 1:S]
-##        Vinit <- rustiefel(P, S)
-        benchmarked <- microbenchmark(EMFit <- subspaceEM(dat$Ylist, P=P, S=S, R=R, nvec=dat$nvec, Vstart=Vinit, verbose=TRUE, maxIters=1000, stiefelAlgo=2), times=nbench_times)
-        Vinit <- EMFit$V
-
-        benchmark_array[sindex, pindex, ] <- benchmarked$time/1e9
     }
 }
 
+## save(benchmark_array, file="benchmark-2-7-19-final.RData")
 dimnames(benchmark_array) = list(S = Svec, P = Pvec, Iter =1:nbench_times)
 as_tibble(reshape2::melt(benchmark_array)) %>% ggplot(aes(x=as.factor(P), y=value)) + geom_boxplot(aes(fill=factor(S))) + scale_fill_discrete_qualitative(palette="Set 2") +
     ylab("Seconds")
