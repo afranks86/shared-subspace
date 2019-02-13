@@ -39,8 +39,9 @@ createNormMatrix <- function(eigenlist, vindices, type="H") {
 
 posteriorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups,
                           probRegion=0.95, hline=NULL, col=NULL,
-                          pch=NULL, lty=NULL, ymax=30, logRatio=FALSE,
-                          plotPoints=TRUE, cex.axis=1.5) {
+                          pch=NULL, lty=NULL, ymax=30, type = "mag", 
+                          plotPoints=TRUE, polar=FALSE, cex.axis=1.5, cex.pts=0.5,
+                          splitGroups=c(), splitPts=rep(0, length(splitPts))) {
 
     ngroups <- length(groups)
     
@@ -54,18 +55,155 @@ posteriorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups,
         lty=rep(1, ngroups)
     }
     par(mar=c(5.1, 5.1, 4.1, 2.1))
-    ylab <- ifelse(logRatio,
-                   expression("log"[2]~"(" ~ lambda[1]/lambda[2] ~ ")"),
-                   expression(lambda[1]/lambda[2]))
+
+    if(type=="mag") {
+        ylab <- expression(lambda[1])
+    }
+    else if(type=="logmag") {
+        ylab <- expression("log"[2]~"(" ~ lambda[1] ~ ")")
+    } else if (type =="logratio") {
+        ylab <- expression("log"[2]~"(" ~ lambda[1]/lambda[2] ~ ")")
+    } else {
+        ylab <- expression("(" ~ lambda[1]/lambda[2] ~ ")")
+    }
+
     plot(0, 0, xlim=c(-pi/2, pi/2),
          ylim=c(0, ymax), cex=0, xlab=expression("angle, acos("~U[1]^T*V[1]~")"), ylab=ylab, xaxt="n", cex.axis=cex.axis, cex.lab=1.5)
     axis(1, at=seq(-pi/2, pi/2, by=pi/4), labels=expression(-pi/2, -pi/4, 0, pi/4, pi/2), cex.axis=cex.axis, cex.lab=1.5)
 
-    for(g in groups) {
-
+    for(g in setdiff(groups, splitGroups)) {
+        
         pmPsi <- getPostMeanPsi(Osamps[, , g , ], OmegaSamps[, g, ],
                                 s2samps[g, ], nsamps)
+
+        eigPsi <- eigen(pmPsi)
+        pmValues <- eigPsi$values
+        pmVectors <- eigPsi$vectors
+        maxIndex <- which.max(pmValues)
+
+        pmPoint <- pmValues[maxIndex]*pmVectors[, maxIndex]
+        if(pmPoint[1] < 0)
+            pmPoint <- pmPoint * c(-1, -1)
+
+        hp <- getHullPoints(nsamps, OmegaSamps[, g, ], Osamps[, , g, ],
+                            type=type, probRegion=probRegion)
+        pts <- hp$pts
+        hullPoints <- hp$hullPoints
+
+        if(plotPoints) {
+            points(pts[1, ], pts[2, ], col=alpha(col[g], 1/2), pch=pch[g], cex=cex.pts)
+        } else {
+            polygon(pts[1, hullPoints], pts[2, hullPoints], lwd=3, border=col[g], col=alpha(col[g], 1/4), lty=lty[g])
+        }
+    }
+
+    if(!is.null(hline))
+        abline(h=hline, lty=2)
+
+    for(g in splitGroups) {
+        browser()
+        allPts <- getHullPoints(nsamps, OmegaSamps[1:2, g, ], Osamps[1:2, 1:2, g, ], type=type)$allPts
+        split1 <- which(allPts[1, ] < 0)
+        split2 <- which(allPts[1, ] >= 0)
+
+
+
+        allPts[2, split1]
         
+        hull1 <- chull(group1pts[1, split1], group1pts[2, split1])
+        numPtsToRemove <- round(nsamps*(1-probRegion))
+        while(numPtsToRemove > 0) {
+            hullPoints1 <- chull(pts[1, ], pts[2, ])
+            if(length(hullPoints) > numPtsToRemove) {
+                hullPoints <- sample(hullPoints, numPtsToRemove)
+                pts <- pts[, -hullPoints]
+                numPtsToRemove <- 0
+            } else{
+                pts <- pts[, -hullPoints]
+                numPtsToRemove <- numPtsToRemove - length(hullPoints)
+            }
+        }
+        
+        hull2 <- chull(group1pts[1, split2], group1pts[2, split2])
+        pts1 <- group1pts[, split1[hull1]]
+        pts1[2, 4] <- min(pts1[2, ])
+        pts2 <- group1pts[, split2[hull2]]
+        pts2 <- pts2[, 3:ncol(pts2)]
+        pts2 <- cbind(c(pi/2, min(pts1[2, ])), pts2)
+        polygon(pts1[1, ], pts1[2, ], lwd=0.01, border="black", col=alpha(regionColors[g], 1/4), lty=1)
+        polygon(pts2[1, ], pts2[2, ], lwd=0.01, border="black", col=alpha(regionColors[g], 1/4), lty=1)
+        lines(pts1[1, c(5:9, 1:4)], pts1[2, c(5:9, 1:4)], col=regionColors[g], lwd=3)
+        lines(pts2[1, 1:10], pts2[2, 1:10], col=regionColors[g], lwd=3)
+    }
+
+    
+}
+
+
+eigenvalueDists <- function(OmegaSamps, nsamps, groups,
+                            probRegion=0.95, hline=NULL, col=NULL,
+                            pch=NULL, lty=NULL, ymax=30, logRatio=FALSE,
+                            plotPoints=TRUE, polar=FALSE, cex.axis=1.5) {
+
+    ngroups <- length(groups)
+    
+    if(is.null(col)){
+        col <- 1:ngroups
+    }
+    if(is.null(pch)){
+        pch=rep(19, ngroups)
+    }
+    if(is.null(lty)){
+        lty=rep(1, ngroups)
+    }
+    par(mar=c(5.1, 5.1, 4.1, 2.1))
+
+    plot(0, 0, xlim=c(-pi/2, pi/2),
+         ylim=c(0, ymax), cex=0, xlab=expression("angle, acos("~U[1]^T*V[1]~")"), ylab=ylab, xaxt="n", cex.axis=cex.axis, cex.lab=1.5)
+    axis(1, at=seq(-pi/2, pi/2, by=pi/4), labels=expression(-pi/2, -pi/4, 0, pi/4, pi/2), cex.axis=cex.axis, cex.lab=1.5)
+
+    LambdaSamps <- OmegaSamps[1, , ] / (1 - OmegaSamps[1, , ])
+
+    tib <- as_tibble(LambdaSamps)
+    tib
+    tib$type <- types
+    tib %>% gather(key=Sample, value=Lambda, -type) %>% mutate(Lambda = as.numeric(Lambda)) %>% ggplot(aes(type, Lambda)) + geom_violin(aes(fill=type)) + ylim(c(0, 300))
+
+}
+
+posteriorPlotPolar <- function(Osamps, OmegaSamps, s2samps, nsamps, groups,
+                          probRegion=0.95, hline=NULL, col=NULL,
+                          pch=NULL, lty=NULL, ymax=30, logRatio=FALSE,
+                          plotPoints=TRUE, polar=FALSE, cex.axis=1.5) {
+
+    ngroups <- length(groups)
+    
+    if(is.null(col)){
+        col <- 1:ngroups
+    }
+    if(is.null(pch)){
+        pch=rep(19, ngroups)
+    }
+    if(is.null(lty)){
+        lty=rep(1, ngroups)
+    }
+
+                              
+    
+    ## par(mar=c(5.1, 5.1, 4.1, 2.1))
+    ## ylab <- ifelse(logRatio,
+    ##                expression("log"[2]~"(" ~ lambda[1]/lambda[2] ~ ")"),
+    ##                expression(lambda[1]/lambda[2]))
+    ## plot(0, 0, xlim=c(-pi/2, pi/2),
+    ##      ylim=c(0, ymax), cex=0, xlab=expression("angle, acos("~U[1]^T*V[1]~")"), ylab=ylab, xaxt="n", cex.axis=cex.axis, cex.lab=1.5)
+    ## axis(1, at=seq(-pi/2, pi/2, by=pi/4), labels=expression(-pi/2, -pi/4, 0, pi/4, pi/2), cex.axis=cex.axis, cex.lab=1.5);
+    radius_vec <- angle_vec <- type_vec <- c()
+                              
+    for(g in groups) {
+        
+        pmPsi <- getPostMeanPsi(Osamps[, , g , ], OmegaSamps[, g, ],
+                                s2samps[g, ], nsamps)
+
         eigPsi <- eigen(pmPsi)
         pmValues <- eigPsi$values
         pmVectors <- eigPsi$vectors
@@ -78,39 +216,43 @@ posteriorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups,
         hp <- getHullPoints(nsamps, OmegaSamps[, g, ], Osamps[, , g, ],
                             logRatio=logRatio)
         pts <- hp$pts
-        hullPoints <- hp$hullPoints
 
-
-
-        if(plotPoints) {
-            points(pts[1, ], pts[2, ], col=alpha(col[g], 1/2), pch=pch[g], cex=0.5)
-        } else {
-            polygon(pts[1, hullPoints], pts[2, hullPoints], lwd=3, border=col[g], col=alpha(col[g], 1/4), lty=lty[g])
-        }
+        radius_vec <- c(radius_vec, pts[2, ], pts[2, ])
+        angle_vec <- c(angle_vec, pts[1, ], pts[1, ]-pi)
+        type_vec <- c(type_vec, rep(g, 2*length(pts[1,])))
+        
     }
 
-    if(!is.null(hline))
-        abline(h=hline, lty=2)
+    tibble(radius=radius_vec, angle=angle_vec, type=type_vec) %>% ggplot(aes(y=radius, x=angle, col=as.factor(type))) +
+        geom_point() + coord_polar(theta="x", clip="off") + ylim(0, 2) + xlim(c(-pi, pi)) + theme_bw() + scale_color_discrete_qualitative(alpha=0.3)
 
 }
 
-getHullPoints <- function(nsamps, OmegaSamps, Osamps, logRatio=FALSE,
+
+## type is "mag", "ratio",
+getHullPoints <- function(nsamps, OmegaSamps, Osamps, type="mag",
                           probRegion=0.95) {
 
     PointsList <- lapply(1:nsamps, function(i) {
         LambdaSamp <- OmegaSamps[, i]/(1-OmegaSamps[, i])
         maxIndex <- which.max(LambdaSamp)
-        LambdaRatio <- LambdaSamp[maxIndex]/LambdaSamp[-maxIndex]
+
+        if(type == "mag")
+            yval <- LambdaSamp[maxIndex]
+        else{
+            yval <- LambdaSamp[maxIndex]/LambdaSamp[-maxIndex]
+        }
+        
         O1 <- Osamps[, maxIndex, i]
         angle <- atan(O1[2]/O1[1])
         
-        c(angle, LambdaRatio)
+        c(angle, yval)
         
     })
 
     pts <- simplify2array(PointsList)
     allPts <- pts
-    if(logRatio == TRUE) {
+    if(type == "logratio") {
         allPts[2, ] <- log2(allPts[2, ])
         pts[2, ] <- log2(pts[2, ])
     }
@@ -135,6 +277,46 @@ getHullPoints <- function(nsamps, OmegaSamps, Osamps, logRatio=FALSE,
     list(allPts=allPts, pts=pts, hullPoints=hullPoints)
     
 }
+
+
+getHullPointsProbabilityRegion <- function(pts, probRegion) {
+    
+}
+
+
+
+
+compute_variance_explained <- function(V, Ylist, nvec, s2vec) {
+
+    P <- nrow(V)
+    S <- ncol(V)
+    ngroups <- length(Ylist)
+    
+    ## Use qudratic fomr to compute goodness of fit
+    evalRatiosQuad <- sapply(1:S, function(M) {
+        sapply(1:ngroups, function(k) {
+
+            YVt <- t(V[, 1:M]) %*% t(Ylist[[k]])
+            numer <- tr(YVt %*% t(YVt))/nvec[k]
+            
+            evals <- svd(Ylist[[k]])$d[1:min(M, nvec[k])]^2/nvec[k]
+            b <- (s2vec[k]*P/nvec[k] - evals - 1)
+
+            quadSol <- ifelse(b^2 - 4*evals < 0, (evals - (s2vec[k]*P/nvec[k])), suppressWarnings((-b + sqrt(b^2 - 4*evals))/2))
+            denom <- sum(quadSol)
+
+            (numer/denom)
+        })
+    })
+
+    evalRatiosQuad
+}
+
+
+
+
+
+
 ##############################################################
 ### Functions for Sampling
 #############################################################
@@ -154,10 +336,10 @@ sampleSigma2 <- function(Y, YV, O, omega, n, nu0=1, s20=1) {
 }
 
 ## trucnated gamma
-tgamma <- function(a, b) {
+tgamma <- function(a, b, scale) {
 
-    M <- 1/pgamma(1, a, b)
-    qgamma(runif(length(a))/M, a, b)
+    logM <- -1 * pgamma(scale, a, b, log.p=TRUE)
+    qgamma(exp(log(runif(length(a))) - logM), a, b)
 
 }
 
@@ -165,12 +347,14 @@ sampleOmega <- function(YV, O, s2, n) {
 
     YVO <- YV %*% O
     R <- ncol(O)
-    cvec <- diag( t(YVO) %*% YVO /(2*s2) )
-    g <- tgamma(rep(n/2 + 1, length(cvec)), cvec/n)
+    cvec <- diag(t(YVO) %*% YVO) /(2*s2)
+
+    ## add divide by n for stability?
+    g <- tgamma(rep(n/2 + 1, length(cvec)), cvec/n, n)
     g <- g/n
-    
+
     omega <- 1 - g
-    
+
     omega
 
 }
@@ -371,6 +555,9 @@ steinsLoss <- function(C1, C2inv) {
 
 }
 
+
+
+
 getSigmaInv <- function(P, U, Omega, s2) {
     
     1/s2*(diag(P) - U %*% diag(Omega) %*% t(U))
@@ -400,7 +587,8 @@ getPostMeanPsi <- function(Osamps, OmegaSamps, s2vec, nsamps) {
     PsiList <- lapply(1:nsamps, function(i) {
         s2vec[i]*(Osamps[, , i] %*% diag(OmegaSamps[, i]/(1-OmegaSamps[, i])) %*% t(Osamps[, , i]))
     })
-    apply(simplify2array(PsiList), c(1, 2), mean)
+
+    apply(simplify2array(PsiList), c(1, 2), function(x) mean(x, na.rm=TRUE))
 }
 
 getPostMeanSigma <- function(P, Ulist, OmegaList, s2vec) {
@@ -412,54 +600,48 @@ getPostMeanSigma <- function(P, Ulist, OmegaList, s2vec) {
 }
 
 ## Get mean predictions for each group relative to truth
-makePrediction <- function(Usamps, omegaSamps, s2samps, SigmaTrueList,
-                           ngroups=dim(Usamps)[3],
-                           genGroups=(1:ngroups), n=20,
-                           nsamps=dim(Usamps)[4],
+makePrediction <- function(Y, V, Osamps, omegaSamps, s2samps, nvec,
+                           ngroups=length(nvec),
+                           nsamps=dim(Osamps)[4],
                            numToAvg=nsamps/2) {
     if(ngroups==1) {
         return(matrix(1, ncol=1, nrow=1))
     }
     
-  predictionMat <- matrix(0, nrow=length(genGroups), ncol=ngroups)
-  for(group in 1:length(genGroups)) {
-    Yk <- rmvnorm(n, sigma=SigmaTrueList[[genGroups[group]]])
-    SigmaHatList <- list()
-    
-    probs <- rep(0, ngroups)
+    ##predictionMat <- matrix(0, nrow=length(genGroups), ncol=ngroups)
+    ## Y <- Y / sum(Y^2)
+    YV <- Y %*% V
+    SigmaHat <- list()
+        
+    probs <- matrix(0, nrow=numToAvg, ncol=ngroups)
     for(i in (nsamps-numToAvg+1):nsamps) {
-      
-      for(k  in 1:ngroups) {
-
-        U <- Usamps[, , k, i]
-        om <- omegaSamps[, k, i]
-        Lam <- diag(om/(1-om))
-        s2 <- s2samps[k, i]
-        SigmaHatList[[k]] <- U %*% Lam %*% t(U) + s2*diag(nrow(Usamps))
-      }
-      probs <- probs +
-        rowMeans(computeMembershipProbabilities(SigmaHatList, Yk))
+            
+        for(k  in 1:ngroups) {
+            Ok <- Osamps[, , k, i]
+            om <- omegaSamps[, k, i]
+            Lam <- diag(om/(1-om))
+            s2 <- s2samps[k, i]
+            SigmaHat[[k]] <-  s2*(Ok %*% Lam %*% t(Ok) + diag(nrow(Ok)))
+        }
+        
+        mp <- computeMembershipProbabilities(as.numeric(YV), SigmaHat)
+        probs[nsamps - i, ] <- mp
     }
-    probs <- probs / numToAvg
+    probs
 
-    predictionMat[group, ] <- probs
-  }
-
-  predictionMat
 }
 
 computeMembershipProbabilities <-
+    function(Y, SigmaList, priorWeights=rep(1/length(SigmaList),
+                                 length(SigmaList))) {
 
-  function(SigmaList, Y,
-           priorWeights=rep(1/length(SigmaList), length(SigmaList))) {
-
-    priorWeights <- priorWeights / sum(priorWeights)
-    unnormalizedProbs <- sapply(SigmaList, function(Sigma) {
-      dmvnorm(Y, sigma=Sigma, log=TRUE)
-    })
+        priorWeights <- priorWeights / sum(priorWeights)
+        unnormalizedProbs <- sapply(SigmaList, function(Sigma) {
+            dmvnorm(Y, sigma=Sigma, log=TRUE)
+        })
 
     if( !class(unnormalizedProbs) == "matrix")
-      unnormalizedProbs <- matrix(unnormalizedProbs, nrow=1, ncol=10)
+        unnormalizedProbs <- matrix(unnormalizedProbs, nrow=1, ncol=length(SigmaList))
     
     probs <- apply(unnormalizedProbs, 1, function(probVec) {
       normProbs <- probVec - max(probVec)
