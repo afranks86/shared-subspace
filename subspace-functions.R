@@ -826,7 +826,7 @@ subspaceEM <- function(Ylist, P, S, R=S, Q=S-R, nvec, rho1=0.1, rho2=0.9,
             V2Ssum <- Reduce('+', lapply(V2Yk, function(x) x %*% t(x)))
             
             ## Diag Q  to ensure inversion is stable
-            PhiShared <- solve(V2Ssum + diag(Q)) * (sum(nvec) + Q + 1)
+            PhiShared <- solve(V2Ssum + 1e-5*diag(Q)) * (sum(nvec) + Q + 1)
             
         } else{
             V2 <- matrix(nrow=nrow(V1), ncol=0)
@@ -835,8 +835,9 @@ subspaceEM <- function(Ylist, P, S, R=S, Q=S-R, nvec, rho1=0.1, rho2=0.9,
         
         for(k in 1:length(Ylist)) {
 
+            ## Diag (S-Q)  to ensure inversion is stable
             V1Y <- t(V1) %*% t(Ylist[[k]])
-            PsiK <- solve(V1Y %*% t(V1Y)) * (nvec[k] + (S-Q) +1)
+            PsiK <- solve(V1Y %*% t(V1Y) + 1e-5*diag(S-Q)) * (nvec[k] + (S-Q) +1)
             PhiList[[k]] <- as.matrix(bdiag(PsiK, 1/PrecVec[k]*PhiShared))
 
         }
