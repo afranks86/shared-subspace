@@ -127,3 +127,12 @@ lines(resMatList[[3]][1, ], lwd=3, col="dark green")
 lines(resMatList[[3]][4, ], lwd=3, col="dark green", lty=2)
 grid()
 legend("bottomright", legend=c("(5, 5)", "(5, 2)", "(50, 2)"), lwd=3, col=c("dark green", "red", "blue"), cex=1.5, bg="white", title=expression("("~lambda[1]~","~lambda[2]~")"))
+
+n <- 50
+S <- 2
+R <- S
+P <- 200
+
+adp <- function(n, e){ (1 - P/n / (e - 1)^2) / (1 + P/n / (e - 1)) }
+curve(adp(x, 10)/(adp(2*x, 10) + adp(2*x, 4.35))/2, from=50, 500)
+curve((adp(2*x, 10) + adp(2*x, 4.2))/2, from=50, 500, add=TRUE, col="blue")

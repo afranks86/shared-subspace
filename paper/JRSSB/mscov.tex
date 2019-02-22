@@ -30,7 +30,15 @@
 \newtheorem{theorem}{Theorem}
 \newtheorem{conjecture}{Conjecture}
 
+
+
+
+\ifdefined\revision
 \newcommand{\edits}[1]{{\textsf{\textcolor{red}{#1}}}}
+\else
+\newcommand{\edits}[1]{#1}
+\fi
+
 
 %\usepackage{amsthm}
 
@@ -272,7 +280,7 @@ assuming that the anisotropic variability from each group occurs on a
 common low dimensional subspace.  Specifically, we posit that the
 covariance matrix for each group can be written as
 \begin{equation}
-\Sigma_k = V\Psi_kV^T + \sigma^2_kI,
+\Sigma_k = \sigma^2_k(V\Psi_kV^T + I),
 \label{eqn:sspsi}
 \end{equation}
 
@@ -330,7 +338,7 @@ eigenvectors and $\Lambda_k$ are the eigenvalues of $\Psi_k$ (see
 Section \ref{sec:bayes}).
 
 Note that for a shared subspace model,
-$V^T\Sigma_kV = \Psi_k + \sigma_k^2I$ is an anisotropic
+$V^T\Sigma_kV = \sigma_k^2(\Psi_k + I)$ is an anisotropic
 $s$-dimensional covariance matrix for the projected data, $Y_kV$.  In
 contrast, the data projected onto the orthogonal space,
 $Y_kV_{\perp}$, is isotropic for all groups.  In Figure
@@ -512,23 +520,24 @@ relatively small values of $s$, even when $p$ is large.
   that we can estimate the shared subspace using the the scaled and pooled
   data, $Y_{\text{pool}} = [\frac{1}{\sigma_1}Y_1;
   \frac{1}{\sigma_2}Y_2;...;  \frac{1}{\sigma_k}Y_k]$, where
-  $Y_{\text{pool}}$ has dimension $\sum_k n_k \times p$.  
+  $Y_{\text{pool}}$ has dimension $(\sum_k n_k) \times p$.  
   We use $\hat{U}_{\text{pool}}\hat{U}_{\text{pool}}^T$  as the
-  initial value for subspace estimation algorigthm where 
+  initial value for subspace estimation algorithm where 
   $\hat{U}_{\text{pool}}$ are the first $s$ eigenvectors of
-  $S_{\text{pool}} = Y_{\text{pool}}^TY_{\text{pool}}$ to
+  $S_{\text{pool}} = Y_{\text{pool}}^TY_{\text{pool}}$.
   If we
   treat $Y_{\text{pool}}$ as an iid sample from the mixture
   distribution $Z$,  then it is known that  $\hat{U}_{\text{pool}}\hat{U}_{\text{pool}}^T$ is not
   consistent when both $n$ and $p$ growing at the same rate.}
-\edits{For any $p$-vector $\eta$, the asymptotic bias of
-  $\eta^T\hat{U}_{\text{pool}}\hat{U}_{\text{pool}}^T\eta$ is well characterized as a function of the eigenvalues of $\Sigma_Z$\citep{Mestre2008}.  If either the eigenvalues of $\sum_k
+\edits{For an arbitrary $p$-vector $\eta$, the asymptotic bias of
+  $\eta^T\hat{U}_{\text{pool}}\hat{U}_{\text{pool}}^T\eta$ is well
+  characterized as a function of the eigenvalues of $\Sigma_Z$ \citep{Mestre2008}.  If either the eigenvalues of $\sum_k
   \frac{\pi_k}{\sigma_k^2} \Psi_k$ or the total sample size $\sum_k n_k$
   are large, $\hat{U}_{\text{pool}}\hat{U}_{\text{pool}}^T$ will
   accurately estimate the shared subspace and likelihood based
-  optimization my have little added benefit.  When either the eigenvalues
-  or sample size are small to moderate in magnitude,
-  $\hat{U}_{\text{pool}}\hat{U}_{\text{pool}}^T$ is a useful starting value for the EM algorithm.}
+  optimization may not be necessary.  However, when either the eigenvalues are
+  small or the sample size is small the likelihood based analysis can
+  improve inference and $\hat{U}_{\text{pool}}\hat{U}_{\text{pool}}^T$ is a useful starting value for the EM algorithm.}
   % An asymptotically lower variance estimator can then be constructed
   % by combining consistent estimators from each of the $K$ groups
   % (e.g. by weighting each of the sample eigenprojection by the inverse
@@ -557,7 +566,7 @@ relatively small values of $s$, even when $p$ is large.
 %     \includegraphics[width=0.5\textwidth]{../Figs/mode-histogram}
 %         \label{fig:modeHist}
 %     \caption{ Subspace similarity ($\tr(\hat{V}\hat{V}^TVV^T)/s$)
-%       between EM estimates and the true shared subspace for 1000 random initializations (grey) and ``smart'' intialization (red line).  }
+%       between EM estimates and the true shared subspace for 1000 random initializations (grey) and ``smart'' initialization (red line).  }
 % \end{figure}
 
 
@@ -632,7 +641,7 @@ estimator of $\lambda_i^{(k)}$ and
   ||Y_k\widetilde{V}||^2_F/n_k - B_k  \to \sum_{i}^s \lambda_i^{(k)} 
 \end{equation}
 As such, when the shared subspace model holds both the
-numerator and denomiator of the goodness of fit statistic converge
+numerator and denominator of the goodness of fit statistic converge
 almost surely to $\sum_{i=1}^{s}
 \lambda_i^{(k)}$.  Therefore $\gamma(Y_k: V, \sigma_k^2)
 \to 1$.
@@ -676,7 +685,7 @@ we can estimate the posterior distribution for $\Psi_k$.   Note that when
 the subspace is known, the posterior distribution of $\Sigma_k$ is
 conditionally independent from the other groups, so that we can
 independently estimate the conditional posterior distributions for each
-group.
+group.  
 
 %  In this paper, we build on recent interest in the spiked
 % covariance model \citep{Donoho2013, Paul2007} and develop tractable
@@ -702,13 +711,22 @@ $V$, becomes
 \noindent Here, we allow $\Psi_k$ to be of rank $r \leq s$ dimensional
 covariance matrix on the $s$-dimensional subspace.  Thus, $\Lambda_k$
 is an $r \times r$ diagonal matrix of eigenvalues, and
-$O_k \in \mathcal{V}_{s,r}$ is the matrix of eigenvectors of $\Psi_k$.
+$O_k \in \mathcal{V}_{s,r}$ is the matrix of eigenvectors of
+$\Psi_k$.  
 For any individual group, this corresponds to the original spiked PCA
 model (Equation \ref{eqn:spiked}) with
-$U_k = VO_k \in \mathcal{V}_{p, r}$.  Differentiating the ranks $r$
+$U_k = VO_k \in \mathcal{V}_{p, r}$.  \edits{Note that the $V$ and $O_k$
+  are jointly unidentifiable because for any $s \times s$
+  orthonormal matrix $W, VO = VW^TWO = \tilde{V}\tilde{O}$. Once we fix a basis
+for the shared subspace, $O_k$ is identifiable.  As such, $O_k$
+should only be interpreted relative to the basis $V$, as determined by
+the EM algorithm described in Section \ref{sec:em}.}  Differentiating the ranks $r$
 and $s$ is helpful because it enables us to independently specify a
 subspace common to all groups and the possibly lower rank features on
-this space that are specific to individual groups.  Although our model
+this space that are specific to individual groups.  
+
+
+Although our model
 is most useful when the covariance matrices are related across groups,
 we can also use this formulation to specify models for multiple
 unrelated spiked covariance models.  We explore this in detail in
@@ -1057,25 +1075,33 @@ subspace, the goodness of fit statistic can be used to identify the
 groups that can be fairly compared on this subspace and whether we
 would benefit from fitting a model with a larger value of $\hat{s}$.
 
+%\todo{Paragraph on implications if spiked covariance model does not hold?}
+
 \paragraph{Model Comparison and Rank Estimation:}
 
 Clearly, correct specification for the rank of the shared subspace is
 important for efficient inference.  So far in this section, we have
 assumed that the group rank, $r$, and shared subspace dimension, $s$,
 are fixed and known.  In practice this is not the case.  Prior to
-fitting a model we should estimate these quantities.
-\citet{Gavish2014} provide an asymptotically optimal (in mean squared
-error) singular value threshold for low rank matrix recovery with
-noisy data.  We use their rank estimator, which is a function of the
-median singular value of the data matrix and the ratio
-$\alpha_k =\frac{p}{n_k}$, to estimate $r$.  Although their estimator
-was derived for individual covariance estimation, we found that Gavish
-and Donoho's estimator can also be applied to the pooled data to
-estimate $s$.  Specifically, we concatenate the data from all groups
-to create an $(\sum_k n_k) \times p$ dimensional matrix and apply
-their rank estimator to this matrix to choose $s$.
+fitting a model we should estimate these quantities.  \edits{Standard
+  model selection methods can be applied to select the both $s$
+  and $r$.  Common approaches include cross validation and information
+  criteria like AIC and BIC.  However, these approaches are
+  computationally intensive since they require fitting the model for
+  each value of $s$ and $r$.}  Here, we estimate the model dimensions
+by applying an asymptotically optimal (in mean squared error) singular
+value threshold for low rank matrix recovery with noisy data
+\citep{Gavish2014}.  This rank estimator is a function of the median
+singular value of the data matrix and the ratio $\alpha_k = p/n_k$.
+\edits{Note that under the shared subspace model, the scaled and
+  pooled data described in section \ref{sec:em} can be expressed as
+  $Y_{\text{pooled}} = X + Z$ where $V$ are the left singular values
+  of $X$ and $Z$ is a noise matrix with zero mean and variance one.
+  This is the setting in which \citet{Gavish2014} develop a rank
+  estimation algorithm, and so it can be appropriately applied
+  to $Y_{\text{pooled}}$ to estimate $s$.}
 
-Using these rank estimators, we conduct a simulation which
+Using this rank estimation approach, we conduct a simulation which
 demonstrates the relative performance of shared subspace group
 covariance estimation under different data generating models.  In
 these simulations we assume the data have $p=200$ features, $r=2$

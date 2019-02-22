@@ -30,12 +30,7 @@ transformed parameters {
     ym <- ym*sin(phi[j]);
   }
   Y[M]  <- ym*cos(phiLast);
-
-  ylast <- 1;
-  for(i in 1:(M-1)) {
-    ylast <- ylast*sin(phi[i]);
-  }
-  Y[M+1] <- ylast*sin(phiLast);
+  Y[M+1] <- ym*sin(phiLast);
   
 }
 model {

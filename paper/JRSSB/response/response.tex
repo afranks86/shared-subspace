@@ -43,34 +43,34 @@
 
 \begin{document}
 
-\section{Reviewer BLAH}
+\section*{Referee 1}
 
 \textbf{\noindent 1. Page 5 has $S_k = Y_k^TY_K$ while Page 10 has $S_k = Y_kY_k^T$}
 
 \begin{resp}
-We have fixedt his to correctly reflect the fact that $S_k = Y_k^TY_K$ as we have defined $Y_k$ and an $n \times p$ matrix.
+We have fixed this to correctly reflect the fact that $S_k = Y_k^TY_K$ as we have defined $Y_k$ and an $n \times p$ matrix.
 \end{resp}
 
 \noindent   \textbf{2. Page 8. It is not clear to me why $||Y_kV||_F/n_k$ is a consistent estimator for the sum
 of the eigenvalues of $V^T\Sigma_kV$. The quantity  $||Y_kV||_F/n_k$  seems to be a consistent estimator of $||V^T\Sigma_kV||^2_F$ and thus $||Y_kV||_F/n_k$ converges to 0. A consistent estimator of the sum of the eigenvalues of $V^T\Sigma_kV$ is Tr($V^TY_k^TY_kV)/n_k$}
 
 \begin{resp}
-Indeed, $||Y_kV||^2_F/n_k$ is a consistent estimator for the sum of the first $s$ eigenvalues of $\Sigma_k$.  In the draft, we excluded the square and thank the reviewer for highlighting this error.  The following argument holds:
-
+Indeed, $||Y_kV||^2_F/n_k$ is a consistent estimator for the sum of the first $s$ eigenvalues of $\Sigma_k$.  In the draft, we excluded the square and thank the reviewer for highlighting this error.  Thus, $$||Y_kV||_F^2/n_k = \tr (V^TY_k^TY_k/n_kV)$$
+where $Y_k^TY_k/n_k \sim \text{Wish}(\frac{1}{n_k}\Sigma_k, n_k)$ and thus $V^TY_k^TY_k/n_kV \sim \text{Wish}(\frac{1}{n_k}V^T\Sigma_kV, n_k) \sim \text{Wish}(\frac{1}{n_k}(\Psi_k + \sigma_k^2I), n_k) $.  
+Therefore, 
 \begin{align*}
 ||Y_kV||_F^2/n_k &= \tr (V^TY_k^TY_k/n_kV)\\
-&= \tr (V^T\hat{\Sigma}_kV)\\
 &\to tr(V^T\Sigma_kV)\\
 & = tr(\Psi_k + \sigma_k^2I)
 \end{align*}
-
+for $n \to \infty$ and $s$ fixed (where the second line is by law of large numbers).
 \end{resp}
 
 \noindent \textbf{3. Page 11. Inference of $O_k$ deserves more discussion. In fact, I am a bit confused here. The matrix $O_k$ is not identifiable because $VO_k\Lambda_kO^T \tilde{V}\tilde{O_k}Λ_k\tilde{O}\tilde{V}^T$ where $\tilde{V} = VW$ and $\tilde{O}_k = W^TO_k$ for some orthonormal W.}
 
 \begin{resp}
 We thank the reviewer for highlighting this source of confusion.  As we noted in the paper, although $V$ is only identifiable up to right rotations, the matrix $VV^T$, which defines
-the plane of variation shared by all groups, is identifiable. Of course, this implies that $O$ itself is only identifiable once we have fixed a basis $V$.  The particular basis for $V$ is usually determined by the particular initialization to the EM algorithm. This itself isn't a problem since we are primarily interested in relative differences between the groups on the shared subspace.  For instance, if we had fixed a different basis for the subspace in the leukemia example, then the left plot in Figure 7 would be rotated version of the current figure, but the top 1\% of genes with with the largest magnitude loadings would not change.  Similarly, we would still correctly identify the genes that are most variable in each leukemia group. \todo{We have clarified these points in the paper.}
+the plane of variation shared by all groups, is identifiable. Of course, this implies that $O$ itself is only identifiable once we have fixed a basis $V$.  The particular basis for $V$ is usually determined by the particular initialization to the EM algorithm. This itself isn't a problem since we are primarily interested in relative differences between the groups on the shared subspace.  For instance, if we had fixed a different basis for the subspace in the leukemia example, then the left plot in Figure 7 would be rotated version of the current figure, but the top 1\% of genes with with the largest magnitude loadings would not change.  Similarly, we would still correctly identify the genes that are most variable in each leukemia group. We have clarified these points in the paper in the section on inference for projected data covariance matrices.
 \end{resp}
 
 
@@ -78,87 +78,148 @@ the plane of variation shared by all groups, is identifiable. Of course, this im
 the first group are $\lambda_1+\sigma_1^2 = \lambda_2+\sigma_1^2 > \sigma_1^2$.  The top two eigenvalues of the second group are both $\sigma_2^2$  or perhaps very very close to $\sigma_2^2$. In other words, there is almost no signal in the second group. Combining the data from two groups will mask the signal in the first group and in this case it is impossible for Gavish and Donoho’s estimator to work. The correct way to do it in this case is to use Gavish and Donoho’s estimator only in the first group. Generally, rank selection in this problem is complicated. Depending on the situation, one may want to assign different weights to different groups while using Gavish and Donoho’s estimator. Here I just provide a counter-example. I hope the authors can do a thorough revision of this section.}
 
 \begin{resp}
+  The referee is correct that if there is a large difference in the noise variance $\sigma^2_k$ across groups then concatenating the data may not work well.  In the problems presented in the paper, the noise variances were all very similar so this was not an issue.  Nevertheless, we can address this issue by using Gavish and Donoho's estimator on the \emph{scaled} and pooled data, an $\sum n_k \times p$ matrix $Y_{\text{pool}} = [\frac{1}{\sigma_1}Y_1; \frac{1}{\sigma_2}Y_2;...;  \frac{1}{\sigma_k}Y_k]$.  Since $\sigma^2_k$ is generally not known, we will typically rescale the data from each group using an estimate of $\sigma^2_k$.  A robust estimator for the noise variance is described in \citet{Gavish2014} which is simply an appropriately scaled version of the median singular value of $Y_k$.  Note that $Y_{\text{pool}}$ has covariance $V^T( \sum_k \frac{\pi_k}{\sigma_k^2} \Psi_k)V + I$ where $\pi_k = \frac{n_k}{\sum_i n_i}$.  In other words, $Y_{\text{pool}} = X + Z$ where $V$ are the left eigenvectors of $X$ and $Z$ is the noise matrix with iid entries with mean zero and variance one.  Gavish and Donoho's estimator assumes invariant white noise with finite fourth moments and so it can be applied appropriately to the scaled, pooled data.
+
+Standard model selection approaches can also be used to select the dimension of the shared subspace.  This includes cross validation and information criteria like AIC and BIC.  These will be computationally intensive since they require fitting the model multiple times for different values of $s$.  We have revised this section to make note of these points.
+
+
 \end{resp}
 
 \noindent \textbf{5. Page 18. The whole Section 5 is a bit trivial. The conclusion is obvious. More groups means more data, which certainly implies higher accuracy. Moreover, only the case when groups are identically distributed is analyzed. This is the case that everyone will have the right intuition. There seems no need to write an entire section discussing it.  Unless the authors can give a general analysis, I will suggest remove this section.}
 
 \begin{resp}
-We believe that this section still has merit, although we have reframed the section to emphasize the most important points.  The purpose of this section is not to point out that ``more groups mean more data'' nor to provide an analysis for the case of $iid$ groups.  Rather, section is meant to identify a benchmark on the accuracy of the shared subspace estimator.  In general, this is a very hard problem, as the subspace accuracy depends on both the eigenvalues and eigenvectors of $\psi_k$.  When the eigenvalues from each group are equal, we conjecture that $\tr(\hat{V}\hat{V}^TVV^T)/\sqrt(S) \geq $ with equality if and only if the eigenvectors from each group are the same.  When the eigenvectors are highly variable across groups, the accuracy of the shared subspac estimator increases dramatically.  Our simulations support this conjecture. 
+  We believe that this section has merit and have reframed the section to emphasize the most important points.  The purpose of this section is not to point out that ``more groups mean more data'' and hence higher accuracy, nor to describe an analysis for the case of $iid$ groups.  Rather, the section is meant to identify a benchmark on the accuracy of the shared subspace estimator.  In general, this is a very hard problem, as the subspace accuracy depends on both the eigenvalues and eigenvectors of $\psi_k$ in a non-trivial way.  In general we do not have access to an analytic expression of the MLE in terms of the eigenvectors and eigenvalues of $\Psi_k$.  Thus, it is not obvious that we can apply RMT methods to identify exactly the asymptotic bias in the general case.  However, when the eigenvalues from each group are equal, we conjecture that $\tr(\hat{V}\hat{V}^TVV^T)/\sqrt{s} \geq \frac{1}{s}\sum_{i=1}^s  \left(1-\frac{\alpha}{K(\lambda_i - 1)^2}\right) /\left(1 +
+    \frac{\alpha}{K(\lambda_i - 1)}\right)$.  We prove that the equality is achieved when the eigenvectors from each group are identical and then show in simulation that the eigenvectors are highly variable across groups, the accuracy of the shared subspace estimator increases dramatically.  
 
 
-Finally, as noted by \citet{} estimating the accuracy of the sample eigenvectors in the spiked covariance model is a hard problem that is not entirely well studied.  In our case, although the ML solution is clearly related to the eigenvectors, we do not have access to a simple function relating the eigenvectors of each sample covariance matrix to the ML solution, and thus it is not obvious how we can use results from RMT. 
+% Finally, as noted by \citet{} estimating the accuracy of the sample eigenvectors in the spiked covariance model is a hard problem that is not entirely well studied.  In our case, although the ML solution is clearly related to the eigenvectors, we do not have access to a simple function relating the eigenvectors of each sample covariance matrix to the ML solution, and thus it is not obvious how we can use results from RMT. 
 \end{resp}
 
 \noindent \textbf{6. Since $\Sigma_k = V\Psi_kV^T + \sigma^2_kI$ direct calculation gives
 $\frac{\sum_k n_k\Sigma_k}{\sum_k n_k} = V\Psi V^T + \sigma^2I$ where $\Psi = \frac{\sum_k n_k \psi_k}{\sum n_k}$ and $\sigma^2 = \sum_k \frac{n_k \sigma_k^2}{\sum n_K}$.  This suggest one can directly apply an SVD on the sample covariance $\hat{\Sigma} = \frac{\sum S_k}{\sum n_k}$ to obtain $\hat{V}$. This naive method ignores the difference among groups, but avoid estimation of other nuisance. When the difference between different groups are not very large, I suspect this naive method should perform better. I suggest the authors compare this naive alternative with their proposal on both simulated and real data.  It will be helpful for readers to be informed when to use the naive one and when to use the proposed EM algorithm.}
 
-\begin{resp}
-We thank the reviwer for the interesting suggestion.  The suggested comparisons are closely related to the results presented in row 2 of table 1, comparing the performance of different models when the groups are in fact iid.  When the groups are identical, , .  Most importantly, the reviewer highlights the importance of identifying a simple method for initializing the EM algorithm (see below).
-\end{resp}
-
 \textbf{7. I wonder if the EM algorithm can be stuck at local. I also wonder how the authors initialize the algorithm. In particular, does the naive estimator suggested in the last point serve as a good initializer?}
 
 \begin{resp}
+We thank the referee for the interesting suggestion.  % The suggested comparisons are closely related to the results presented in row 2 of table 1, comparing the performance of different models when the groups are in fact iid.  
+Most importantly, the reviewer highlights the importance of identifying a simple method for initializing the EM algorithm. Empirical explorations show that the EM algorithm tends to converge to suboptimal local-minima when initialized randomly.  We show in simulation that when we use the initial condition described above, the EM algorithm converges to a mode which is much closer to the truth (See an example in Fig 1 of this response).  
 
-We are in fact using an initialization chosen in a very similar, but did not include the details in the first draft of the paper.  We now have a section in the paper on convergence of the EM algorithm and the importance of a reasonable initialization.
+We are in fact using an initialization chosen in a way that is very similar to the one proposed by this referee, but did not include the details in the first draft of the paper.  We now have a section in the paper on convergence of the EM algorithm and the importance of a reasonable initialization.  Specifically, we initialize our algorithm at $UU^T$ where $U$ are the eigenvectors of $Y_{\text{pool}}^T Y_{\text{pool}}$ and $Y_{\text{pool}}$ is the scaled and pooled data described in response to point $4$.  The initialization is a robust estimator, even when the data is not normally distributed, but the estimate can be improved when using the likelihood-based estimator for normally distributed data. The initialization strategy and issues with convergence are described in more detail in a new subsection on the convergence of the EM algorithm.  
 
 
 \begin{figure}[t]
     \centering
     \includegraphics[width=0.5\textwidth]{../../Figs/mode-histogram}
         \label{fig:modeHist}
-    \caption{ Subspace similarity ($\tr(\hat{V}\hat{V}^TVV^T)/s$)
-      between EM estimates and the true shared subspace for 1000 random initializations (grey) and ``smart'' intialization (red line).  }
+    \caption{ An example showing subspace similarity ($\tr(\hat{V}\hat{V}^TVV^T)/s$)
+      between EM estimates and the true shared subspace for 1000 random initializations (grey) and the initialization based on the eigenvectors of the scaled and pooled data (red line).  }
 \end{figure}
 \end{resp}
 
-\section{}
+\section*{Referee 2}
 
-The heterogeneity is imposed via $\Psi_k$’s and information is shared via V (of suitable dimensions).  The modeling framework is interesting, but it does not come to be as a “surprise” in any way or form. The authors propose an empirical Bayes framework to perform inference. Some “running” justifications via RMT is used in various places of the paper.  In summary, I find the paper interesting. However, the methods employed in the paper as well as the analysis comes across to me as rather straightforward. I do not see sufficient novelty in the paper in any of the areas of modeling, computation or theory to warrant a publication in JRSSB.  Some comments are provided below
+% The heterogeneity is imposed via $\Psi_k$’s and information is shared via V (of suitable dimensions).  The modeling framework is interesting, but it does not come to be as a “surprise” in any way or form. The authors propose an empirical Bayes framework to perform inference. Some “running” justifications via RMT is used in various places of the paper.  In summary, I find the paper interesting. However, the methods employed in the paper as well as the analysis comes across to me as rather straightforward. I do not see sufficient novelty in the paper in any of the areas of modeling, computation or theory to warrant a publication in JRSSB.  Some comments are provided below
+
+% \begin{resp}
+% \end{resp}
+
+\textbf{The estimation of the parameters carried out via EM comes across to me as standard. The sampling procedures, as well as the choice of priors seem to be (directly) motivated via earlier work, some of them done by a subset of the authors.  One of the main criticisms for EM type algorithms is that there is no rigorous justification of the convergence of this procedure – especially because the problem considered involves dealing with extremely non-convex optimization problems. What can be said about the quality of the estimates of V , $\phi$, etc that are obtained? Are they prone to poor local minima or do they reach good solutions with provable guarantees (possibly under assumptions on the data)? An important theme of current research at the interface of statistical computing and optimization is to understand formal guarantees on the EM procedure.  Some studies along these lines may greatly benefit the paper.}
 
 \begin{resp}
+
+
+We have added a section  on convergence of the EM algorithm and intelligent choices for starting values.  The Stiefel manifold is compact and the marginal
+  likelihood is continuous, so the likelihood is bounded.  Thus, the EM
+  algorithm, which increases the likelihood at each iteration, will converge to a stationary point.  Indeed the objective function is highly non-convex and thus intelligently initializing the EM algorithm is important.  See the figure in response to point 7 by referee 1.  % Unlike the EM algorithm applied to problems with missing data which grows in $n$ (e.g. mixture models) the population likelihood of $V$ converges to \todo{}
 \end{resp}
 
-The estimation of the parameters carried out via EM comes across to me as standard. The sampling procedures, as well as the choice of priors seem to be (directly) motivated via earlier work, some of them done by a subset of the authors.  One of the main criticisms for EM type algorithms is that there is no rigorous justification of the convergence of this procedure – especially because the problem considered involves dealing with extremely non-convex optimization problems. What can be said about the quality of the estimates of V , $\phi$, etc that are obtained? Are they prone to poor local minima or do they reach good solutions with provable guarantees (possibly under assumptions on the data)? An important theme of current research at the interface of statistical computing and optimization is to understand formal guarantees on the EM procedure.  Some studies along these lines may greatly benefit the paper.
-
-\begin{resp}
-\todo{}
-\end{resp}
-
-The analysis in Section 5 is interesting but is not complete (agreed, some simulation results
+\textbf{The analysis in Section 5 is interesting but is not complete (agreed, some simulation results
 are provided) for the joint estimation problem. Can the gains be quantified more formally
 by appealing to RMT results — by accounting for the fact that several parameters are being
-jointly estimated?
+jointly estimated?}
 
 \begin{resp}
+We have reorganized the results in Section 5 to make the claims more clear.  Specifically we provide a conjecture on the lower bound of the subspace accuracy, prove that bound is achieved when the data is identically distributed and show in simulation the bound is exceeded.  Unfortunately, it is not clear how RMT results can be used to make a more precise claim about the accuracy of the shared subspace estimator in the most general setting.  Existing RMT results describe the behavior of eigenvectors or eigenprojection matrix for small $n$, large $p$.  In our problem, we have no analytic expression relating the MLE for the shared subspace estimator to the eigenvectors and eigenvalues.
 \end{resp}
 
-The Gavish Donoho threshold applies for a specific class of models (way more special than
+\textbf{The Gavish Donoho threshold applies for a specific class of models (way more special than
 the classes studied in this paper) – I am not sure if their threshold can be justified rigorously
-in the context of the models being studied in this paper.
+in the context of the models being studied in this paper.}
 
 \begin{resp}
-The Gavish-Donoho estimator applies to the class of spiked covariance models (single group).  Since each covariance matrix is a spiked covariance matrix, in fact the Gavish-Donoho threshold applies to estimating the rank from each group individually.  The challenge generalizing the rank estimator to the shared subspace setting.  \todo{} 
+In fact the Gavish-Donoho estimator applies to the \emph{broader} class of models than that studied here because they do not assume normality.  Specifically, they focus on recovering a low rank matrix $X$ from a matrix $Y = X + \sigma Z$ where Z has iid mean zero entries with finite fourth moment.  This setting applies to estimating the rank of each covariance matrix independently (since they are spiked covariance matrices).  We can also apply the Gavish-Donoho applies to the scaled and pooled data as described in the paper and response to point 6 and 7 by referee 1. 
 \end{resp}
 
-\section{editor}
-
-In addition, the following points are based on my own non-expert reading of your work. If you decide to revise and resubmit, I would also like you to clarify these in the next version of the paper.
-
-1. I think the problem is rather specific – so I wonder if your work is of generic enough interest for the mainstream of Series B readers.
+\section*{Associate Editor}
+\textbf{Two referees have considered your paper. They agree that your paper proposes an interesting approach to the problem of estimating the covariance matrix for different groups of observations in high-dimensions. The paper has some nice features. The proposed model can be estimated using the EM algorithm and an MCMC algorithm is proposed for posterior inference. In addition, some properties are investigated. However, both referees have concerns about convergence problems in the EM algorithm and there is little evidence of good mixing in the MCMC algorithm.} % The referees also questions whether the paper meets the level of novelty associated with JRSS B, the depth of the analysis in Section 5 (which is the main theoretical part) and the illustrations of the results. I agree with their concerns and I feel that the paper is currently not acceptable for JRSS B.
 
 \begin{resp}
+We have added a section to the paper discussing the convergence of the EM algorithm (see response to reviewers above).  In addition, we provide trace plots and effective sample sizes for the log eigenvalue ratio and eigenvector angle plotted in Figure's 2, 5, and 7.  
 \end{resp}
 
-2. What happens if the spiked covariance model holds only approximately?
+
+\begin{figure}[t]
+    \centering
+    \subfigure[Simulation (Figure 2).]{
+      \label{fig:sdimension}
+      \includegraphics[width=0.5\textwidth]{../../Figs/simulation-cov-trace.pdf}}\\
+    \subfigure[Leukemia data (Figure 5).]{
+      \label{fig:ratio-s5}
+      \includegraphics[width=0.5\textwidth]{../../Figs/leukemia-cov-trace.pdf}}\\
+    \subfigure[Metabolomics data (Figure 7)]{
+        \label{fig:ratio-s20}
+        \includegraphics[width=0.5\textwidth]{../../Figs/dmelan-cov-trace.pdf}}\\
+      \caption{Trace plot for log eigenvalue ratios and the first eigenvector angle, for all plots presented in the paper. Effective sample sizes are all large: for 1000 samples, it is over 500 for all parameters and nearly 1000 for most parameters, which reflects the fact that our samples are nearly independent.}
+\label{fig:dimensionPlots}
+\end{figure}
+
+\begin{figure}[t]
+    \centering
+    \subfigure[Simulation study (Figure 2).]{
+      \label{fig:sdimension}
+      \includegraphics[width=0.3\textwidth]{../../Figs/simulation-noisevar-trace.pdf}}
+    \subfigure[Leukemia data (Figure 5).]{
+      \label{fig:ratio-s5}
+      \includegraphics[width=0.3\textwidth]{../../Figs/leukemia-noisevar-trace.pdf}}
+    \subfigure[Metabolomics data (Figure 7).]{
+        \label{fig:ratio-s20}
+        \includegraphics[width=0.3\textwidth]{../../Figs/dmelan-noisevar-trace.pdf}}
+      \caption{Trace plot for $sigma^2_k$, for all datasets analyzed in the paper. Effective sample sizes are all close 1000, which reflects the fact that our samples are nearly independent.}
+\label{fig:dimensionPlots}
+\end{figure}
+
+
+\section*{Editor}
+
+\textbf{1. I think the problem is rather specific – so I wonder if your work is of generic enough interest for the mainstream of Series B readers.}
 
 \begin{resp}
+We believe that the problem is of sufficient generic interest for mainstream readers. First, understanding covariability of high dimensional data is of interest in several application areas. For example, in applications in the biological sciences, like those presented in the paper, the sample size is often limited by the number of available subjects and/or the expense of collecting samples, but the number of possible features for each subject is large (e.g. gene or protein expression for thousands of genes).  In most of these problems the data can be naturally divided into multiple distinct groups (e.g. cases and controls).  Further, it is clear that understanding second-moment information is essentially for understanding the mechanisms underlying the processes studied.  
+
+From a methodological standpoint, shared subspace covariance estimation is closely related to many popular and widely studied statistical models.  In particular, the ideas presented in our paper are relevant to sufficient dimension reduction, factor based methods and partial least squares as well as other methods for high dimensional covariance estimation (e.g. graphical lasso). Our paper examines the utility of exploring differences between groups of data on a common low dimensional space.  This general idea may dovetail well with other common procedures for inferring patterns in high dimensional data.
+
 \end{resp}
 
-3. In my first decision letter, I asked for the theoretical description of the properties of your method,but I am not sure if this has been done successfully. In particular, I cannot see theorem-type results quantifying the behaviour of your procedure.
+\textbf{2. What happens if the spiked covariance model holds only approximately?}
 
 \begin{resp}
-\todo{BLAH}
+There are, broadly speaking, two ways in which the spiked covariance model may not hold.  First, multivariate normality may hold, but the covariance matrix may not fit the ``low-rank + diagonal'' form. In other words, the $p \times p$ covariance matrix may have $p$ distinct eigenvalues (rather than $s + 1$).  Even when the spiked covariance model does not hold, it is still a \emph{useful} model when $n < p$ setting because only a few eigenvectors and eigenvalues are accurately estimable.  In particular, the distribution of $s+1st$ through $pth$ eigenvectors will be nearly indistinguishable from the distribution of eigenvectors associated with a single common eigenvalue of multiplicity (p-s) when these eigenvalues are very small relative to p/n.  As is evident from the RMT results on eigenvector and eigenvalue estimation, as $n$ increase more eigenvalues/vectors are accurately estimable.  The number of spikes is not to meant to reflect the number of \emph{true} unique eigenvalues, only the number of eigenvalues associated with estimable eigenvectors.
+
+Second, if the true distribution is very non-normal then the shared subspace model may not be appropriate, especially if the contours of the true data generating distribution are non-elliptical.  However, we can still estimate a shared subspace using the eigenvectors of the scaled and pooled data.  Under relatively weak conditions on the moments of the data generating distribution, we can use these eigenvectors to define a  $\sqrt{n}$-consistent estimator the space spanned by the first $s$ eigenvectors from each group (see \citep{Mestre2008}).  
 \end{resp}
+
+\textbf{3. In my first decision letter, I asked for the theoretical description of the properties of your method, but I am not sure if this has been done successfully. In particular, I cannot see theorem-type results quantifying the behaviour of your procedure.}
+
+\begin{resp}
+We believe that after these revisions that the behavior of our method is well described.  In particular the paper now includes:
+\begin{itemize}
+\item Discussion of the convergence on the EM algorithm.  We describe $\sqrt{n}$-consistent initial values for the shared subspace estimator which improve convergence to more optimal modes.
+\item A theorem about the behavior of the goodness of fit estimator when $n << p$.  The goodness of fit test can be used to identify whether the inferred subspace is indeed reasonable.  
+\item A conjecture about the accuracy of the shared subspace estimator in the small n, large p setting.  We provide a lower bound on the asymptotic bias of our estimator, prove that the lower bound holds exactly when the data from each groups are identically distributed and show in simulation that we exceed this bound.  
+\end{itemize}
+\end{resp}
+
+\bibliographystyle{chicago}
+\bibliography{../refs}
 
 \end{document}

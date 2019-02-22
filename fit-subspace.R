@@ -89,8 +89,14 @@ fitSubspace <- function(P, S, R, Q=S-R, Ylist, nvec, ngroups=length(Ylist),
                                   1, sum(nvec))
             
             ## Sample common O
-            O2 <- sampleO(YVpooled[, (R+1):(R+Q)], Ok[(R+1):(R+Q), (R+1):(R+Q)], 1,
+            O2 <- sampleO(YVpooled[, (R+1):(R+Q)], Olist[[k]][(R+1):(R+Q), (R+1):(R+Q)], 1,
                           Omega2)
+
+            ## order eigenvalues from largest to smallest
+            ord_omega <- order(Omega2, decreasing=TRUE)
+            Omega2 <- Omega2[ord_omega]
+            O2 <- O2[, ord_omega]
+            
         } else {
             Omega2 <- c()
             O2 <- matrix(nrow=0, ncol=0)
@@ -108,8 +114,8 @@ fitSubspace <- function(P, S, R, Q=S-R, Ylist, nvec, ngroups=length(Ylist),
 
                 Omega1 <- sampleOmega(YVlist[[k]], Olist[[k]][, 1:R],
                                          s2vec[k], nvec[k])
+                
 
-                OmegaList[[k]] <- c(Omega1, Omega2)
                 
             }
                 ## Sample O_k
@@ -117,10 +123,16 @@ fitSubspace <- function(P, S, R, Q=S-R, Ylist, nvec, ngroups=length(Ylist),
                 
                 O1 <- sampleO(YVlist[[k]][, 1:R], Olist[[k]][1:R, 1:R], s2vec[k],
                                   (OmegaList[[k]])[1:R])
-                                  
+
+                ## order eigenvalues from largest to smallest
+                ord_omega <- order(Omega1, decreasing=TRUE)
+                Omega1 <- Omega1[ord_omega]
+                O1 <- O1[, ord_omega]
+                
                 Ok <- as.matrix(bdiag(O1, O2))
             }
 
+            OmegaList[[k]] <- c(Omega1, Omega2)
             
             Olist[[k]] <- Ok
             
@@ -204,7 +216,7 @@ fitBayesianSpike <- function(P, R, SC, n, niters=100, nskip=1,
     }
     
     s2 <- init$s2
-    U <- init$U
+    U <- init$Upp
     omega <- init$omega
 
     SigInvInit <- getSigmaInv(P, init$U, init$omega, init$s2)

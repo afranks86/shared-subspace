@@ -4,10 +4,12 @@ rm(list=ls())
 library(microbenchmark)
 library(rstiefel)
 library(tidyverse)
+library(cowplot)
+library(colorspace)
 
 source("fit-subspace.R")
 source("generateData.R")
-source("helper.R")
+source("subspace-functions.R")
 
 ########################################################
 ############# Data Generation #########################
@@ -58,22 +60,30 @@ nvec <- dat$nvec
 
 Vinit <- svd(do.call(cbind, lapply(1:ngroups, function(k) svd(t(dat$Ylist[[k]]))$u[, 1:S])))$u[, 1:S]
 EMFit <- subspaceEM(dat$Ylist, P=P, S=S, R=R, nvec=dat$nvec,
-                    Vstart=Vinit, verbose=TRUE, max_EM_iters=10, stiefelAlgo=2)
+                    Vstart=Vinit, verbose=TRUE, EM_iters=100, M_iters=100, stiefelAlgo=2)
+
 svd_init <- tr((t(dat$V) %*%  EMFit$V) %*% (t(EMFit$V) %*% dat$V)) / S
 
 nruns <- 100
 similarity <- numeric(runs)
+
+Vinit_base <- svd(do.call(cbind, lapply(1:ngroups, function(k) svd(t(dat$Ylist[[k]]))$u[, 1:n])))$u[, 1:(n*ngroups)]
+
 for(i in nruns) {
 
     print(i)
-    Vinit <- rustiefel(P, S)
+    Vinit <- Vinit_base %*% rustiefel(n*ngroups, S)
     EMFit <- subspaceEM(dat$Ylist, P=P, S=S, R=R, nvec=dat$nvec,
-                        Vstart=Vinit, verbose=TRUE, max_EM_iters=10, stiefelAlgo=2)
+                    Vstart=Vinit, verbose=TRUE, EM_iters=100, M_iters=1000, stiefelAlgo=2)
     random_init <- tr((t(dat$V) %*%  EMFit$V) %*% (t(EMFit$V) %*% dat$V)) / S
     similarity[i] <- random_init
 }
 
-tibble(score=similarity) %>% ggplot() + geom_density(aes(x=score), fill=alpha("red", 0.5)) + geom_vline(xintercept=svd_init, size=2, col="blue")  +xlim(c(0, 1)) + xlab("Subspace Similarity") + ylab("") + theme_grey(base_size=16)
+load("results/similarity_scores.RData")
 
+pdf("paper/Figs/initialization_fig.pdf")
+cols <- qualitative_hcl(2, palette="Set 2")
+tibble(score=similarity) %>% ggplot() + geom_density(aes(x=score), fill=cols[1]) + geom_vline(xintercept=svd_init, size=2, col=cols[2], linetype="dashed")  +xlim(c(0, 1)) + xlab("Subspace Similarity") + ylab("") + theme_classic(base_size=16) + ggtitle("Random initializations vs Eigen Initialization")
+dev.off()
 
 

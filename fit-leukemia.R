@@ -131,11 +131,21 @@ save(samples, initSS, file=sprintf("results/leukemiaBayes-%s.RData", format(Sys.
 
 regionColors <- c(4, 2:3, 1, 5:7)
 
+g1 <- 7
+g2 <- 2
+pmPsi6 <- getPostMeanPsi(samples$Osamps[, , g1 , ],
+                            samples$omegaSamps[, g1, ],
+                         samples$s2samps[g1, ], 100)
+pmPsi7 <- getPostMeanPsi(samples$Osamps[, , g2 , ],
+                            samples$omegaSamps[, g2, ],
+                         samples$s2samps[g2, ], 100)
+
+O <- svd(pmPsi6[1:R, 1:R] - pmPsi7[1:R, 1:R])$u[, 3:4]
 
 
 ## view data projected onto a 2D subspace
 unique(typeVec)
-g <- 7
+g <- 1
 
 
 O <- samples$Osamps[1:R, 1:R, g, 1000]
@@ -174,6 +184,9 @@ omegaSamps_proj[, , 1000]/(1-omegaSamps_proj[, , 1000])
 
 dev.off()
 
+
+samples$omegaSamps[, , 1000]/(1-samples$omegaSamps[, , 1000])
+samples$omegaSamps[, , 1000]/(1-samples$omegaSamps[, , 1000])
 
 pdf(sprintf("paper/Figs/leukemia-biplot-%i-%s.pdf", g, format(Sys.Date(), "%m-%d")), font="Times")
 
@@ -248,14 +261,16 @@ dev.off()
 
 symbol_names <- sapply(rownames(EMFit$V), function(x) {
     na.omit(select(hgu95av2.db, x, c("SYMBOL"))$SYMBOL)[1]
-})p
+})
+
 
 v1 <- Vstar[, view_indices[1]]
 v2 <- Vstar[, view_indices[2]]
 mag <- rowSums(Vstar[, view_indices]^2)
 names(mag) <- rownames(EMFit$V)
 
-gp_v1 <- find_go_groups(abs(v1), 0.1, go_name_length=60)
+gp_v1 <- find_go_groups(abs(v1), 0.05, go_name_length=60)
+gp_v1
 
 print(xtable(gp_v1[, c("Name", "Q-value", "Numer of Genes")], na="", quote=FALSE),
       include.rownames=TRUE, include.colnames=TRUE,
@@ -271,7 +286,18 @@ gp_v2
 gp_mag <- find_go_groups(mag, 0.1, go_name_length=60)
 xtable(gp_mag)
 
-intersect(group2proteins[["GO:0051436"]], group2proteins[["GO:0051437"]])
+mag_all <- rowSums(Vstar^2)
+names(mag_all) <- rownames(EMFit$V)
+gp_all <- find_go_groups(abs(mag_all), 0.05, go_name_length=60)
+gp_all
+
+
+
+print(xtable(gp_all[, c("Name", "Q-value", "Numer of Genes")], na="", quote=FALSE),
+      include.rownames=TRUE, include.colnames=TRUE,
+      floating=FALSE, sanitize.text.function=identity,
+      file=sprintf("paper/Figs/go-all.txt"))
+
 
 #############################################################
 ################ Check Covariance Similarity #################
@@ -313,7 +339,7 @@ rownames(similarity_matrix) <- colnames(similarity_matrix) <- unique(typeVec)
 
 pdf("paper/Figs/leukemia_dendro.pdf")
 hc <- hclust(as.dist(similarity_matrix), "complete")
-ggdendrogram(hc, size=10)
+ggdendrogram(hc, aes(size=100))
 dev.off()
 
 pdf("paper/Figs/leukemia_heat.pdf")
@@ -325,13 +351,108 @@ dev.off()
 ################ Check Predictions  ########################
 #############################################################
 
-g <- 1
-Y <- Ylist[[g]][sample(nvec[g], 1), ]
-
-makePrediction(Y, EMFit$V, samples$Osamps, samples$omegaSamps, samples$s2samps,
+Y <- pooledResiduals
+preds <- makePrediction(Y, EMFit$V, samples$Osamps, samples$omegaSamps, samples$s2samps,
                nvec=nvec, ngroups=length(nvec), nsamps=1000,
                numToAvg=500)
 
-Ylist[[1]][1,] %*% Vinit
+## For how many 
+sapply(unique(typeVec), function(type) {
+       mean((as.integer((as.factor(typeVec))) == apply(preds_med, 1, which.max))[typeVec==type])})
+mean((as.integer((as.factor(typeVec))) == apply(preds_med, 1, which.max)))
 
 
+
+sort(preds_med[1, ], index.return=TRUE, decreasing=TRUE)$ix
+
+
+
+order(preds_med[1, ], decreasing=FALSE)
+preds_med[1, ]
+
+apply(preds_med, 1, which.max)
+sort(preds_med,partial=6)[6]
+
+
+
+preds_med <- apply(preds, c(1, 3), median)
+colnames(preds) <- unique(typeVec)
+tib <- as_tibble(preds)
+tib$sample <- 1:nrow(Y)
+
+tv <- unique(typeVec)
+tv[1] <- "BCR"
+tv[2] <- "E2A"
+labelDat <- tibble(Group = tv, x = c(0, cumsum(nvec))[1:7] + nvec/2, y=rep(1.05, 7))
+
+pdf("paper/Figs/membership_probs.pdf", width=12, height=4)
+tib %>% gather(key=group, value=prob, -sample) %>%
+    ggplot() + geom_bar(aes(x=sample, y=prob, fill=group), stat="identity",width=1) +
+    geom_vline(xintercept=c(0, cumsum(nvec))+1/2) +
+    scale_fill_discrete_qualitative() +
+    xlab("Samples") + ylab("Estimated Probabilities") +
+    geom_text(data=labelDat, aes(x=x, y=y, label=Group), angle=0, size=5) +
+    theme(legend.position="top", legend.title=element_blank())
+dev.off()
+
+
+apply(apply(preds, c(1, 3), median), 1, which.max) %>% table
+
+plot(residualList[[7]] %*% Vstar[, 1:2], ylim=c(-15, 15), xlim=c(-15,15))
+points(Ylist[[1]] %*% Vstar[, 1:2], ylim=c(-15, 15), xlim=c(-15,15), col="blue")
+
+dim(Ylist[[1]])
+unique(typeVec)
+nvec
+
+library(Rtsne)
+rtsne_pooled <- Rtsne(pooledResiduals)
+
+plot(rtsne_pooled$Y, col=as.factor(typeVec), pch=19)
+
+Z <- pooledResiduals %*% Vinit[, 1:10]
+
+res <- sapply(1:7, function(g) {
+    psi <- getPostMeanPsi(samples$Osamps[, , g, ], samples$omegaSamps[, g, ], samples$s2samps[, g], 200)
+    psi <- mean(samples$s2samps[, g]) + psi
+    dmat <- sqrt(mahalanobis(Z, center=FALSE, cov=psi[1:10, 1:10]))
+    plot(dmat, col=as.factor(typeVec), ylim=c(0, 25))
+    dmat
+})
+
+
+dist_clust <- Rtsne(scale(res, center=FALSE), perplexity=50, dims=3)
+
+plot(dist_clust$Y[, c(1, 2)], col=as.factor(typeVec), pch=19)
+
+plot3D::scatter3D(x=dist_clust$Y[,1], y=dist_clust$Y[,2], z=dist_clust$Y[,3],
+                  bty = "g", pch = 18, 
+                  col.var = as.integer(typeVec), 
+                  col = 1:7,
+                  pch = 18)
+
+
+
+
+
+
+
+                  col.var=as.factor(typeVec), col=1:7)
+
+
+
+
+
+
+
+
+
+
+
+
+rownames(Vstar)
+
+Vstar2 <- Vstar
+rownames(Vstar2) <- symbol_names[!duplicated(symbol_names[, 1]), 2]
+head(Vstar2)
+Vstar["STAT1", ]

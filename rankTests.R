@@ -45,7 +45,7 @@ evals <- c(250, 25)
 niters <- 1000
 nwarmup <- niters/2
 
-## Subspace Shrinkage: Psi_k = VO_kLam_kO_k^TV^T
+## Subspace Shrinkage: Psni_k = VO_kLam_kO_k^TV^T
 LambdaList <- list()
 lam <- evals
 for( k in 1:ngroups) {

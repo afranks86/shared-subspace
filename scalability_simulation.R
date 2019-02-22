@@ -1,8 +1,6 @@
 rm(list=ls())
 
 ## Need these for Rscript
-library(methods)
-library(utils)
 library(microbenchmark)
 library(rstiefel)
 library(tidyverse)
@@ -14,10 +12,10 @@ source("fit-subspace.R")
 source("generateData.R")
 source("subspace-functions.R")
 
+
 nbench_times <- 10
 Svec <- c(2, 10, 25, 50)
 Pvec <- seq(from=1000, to=10000, by=1000)
-
 
 ## Initialize sampler
 ngroups <- dat$ngroups
@@ -63,7 +61,14 @@ for(sindex in 1:length(Svec)) {
     }
 }
 
-## save(benchmark_array, file="benchmark-2-7-19-final.RData")
-dimnames(benchmark_array) = list(S = Svec, P = Pvec, Iter =1:nbench_times)
-as_tibble(reshape2::melt(benchmark_array)) %>% ggplot(aes(x=as.factor(P), y=value)) + geom_boxplot(aes(fill=factor(S))) + scale_fill_discrete_qualitative(palette="Set 2") +
-    ylab("Seconds")
+save(benchmark_array, file="results/benchmark_times.RData")
+
+pdf("paper/Figs/run_times.pdf", height=4, width=8)
+dimnames(benchmark_array) = list(S = Svec, P = Pvec, Iter = 1:nbench_times)
+as_tibble(reshape2::melt(benchmark_array)) %>% ggplot(aes(x=as.factor(P), y=value)) +
+    geom_jitter(aes(col=factor(S))) + scale_fill_discrete_qualitative(palette="Set 2") +
+    ylab("Seconds") + ylim(c(0, 300)) +
+    xlab("P") + scale_colour_discrete(name  = "S")
+
+dev.off()
+

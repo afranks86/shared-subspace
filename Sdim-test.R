@@ -1,27 +1,8 @@
-#!/usr/bin/env Rscript
-
-#SBATCH -n 4  #Number of cores
-#SBATCH -N 1  #Number of cores 
-#SBATCH -t 15000  #Runtime in minutes
-#SBATCH -J ss3
-#SBATCH -o outfiles/ssg_%a.out #Standard output
-#SBATCH -e outfiles/ssg_%a.err #Standard error
-#SBATCH -p stats #Partition to submit to 
-#SBATCH --mem=10000  #Memory per node in MB (see also --mem-per-cpu)
-#SBATCH -a 1-100
-
-rm(list=ls())
-idx <- as.numeric(Sys.getenv("SLURM_ARRAY_TASK_ID"))
-
-## Need these for Rscript
-library("methods")
-library("utils")
-
 library(rstiefel)
 
 source("fit-subspace.R")
 source("generateData.R")
-source("helper.R")
+source("subspace-functions.R")
 
 ########################################################
 ############# Data Generation #########################

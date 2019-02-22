@@ -19,6 +19,7 @@ library("utils")
 
 library(rstiefel)
 
+scriptDir <- dirname(sys.frame(1)$ofile)
 source("fit-subspace.R")
 source("generateData.R")
 source("helper.R")
@@ -31,12 +32,14 @@ datType <- ((idx-1) %% 3) + 1
 ########################################################
 
 n <- 50
-S <- 2
-R <- 2
+S <- 5
+R <- 5
+Q <- 3
 P <- 200
 ngroups <- 10
 
 evals <- c(250, 25)
+evals <- c(125, 50, 250, 25, 4)
 
 niters <- 1000
 nwarmup <- niters/2
@@ -51,7 +54,7 @@ if(datType==1) {
         LambdaList[[k]] <- lam
     }
     
-    dat <- generateData(P=P, S=S, R=R, ngroups=ngroups,
+    dat <- generateData(P=P, S=S, R=2, ngroups=ngroups,
                         LambdaList=LambdaList, nvec=rep(n, ngroups))
 
     dat$genType <- "Shared subspace"
@@ -124,13 +127,23 @@ for(fitType in 1:1) {
         Slist <- dat$Slist
 
         Vinit <- svd(do.call(cbind, lapply(1:ngroups, function(k) svd(t(dat$Ylist[[k]]))$u[, 1:R])))$u[, 1:S]
+        Vinit <- rustiefel(P, S)
         EMFit <- subspaceEM(dat$Slist, P=P, S=S, R=R, nvec=dat$nvec,
-                            rho1=0.5, rho2=0.5, 
-                            Vstart=Vinit, verbose=FALSE, maxIters=100)
+                            PrecVec=rep(10, ngroups),
+                            rho1=0.1, rho2=0.9, 
+                            Vstart=Vinit, verbose=TRUE, maxIters=100)
         Vinit <- EMFit$V
+
+        A <- dat$Olist[[k]] %*% diag(dat$LambdaList[[k]]) %*% t(dat$Olist[[k]])
+        B <- solve(EMFit$PhiList[[k]])
+        cov2cor(R %*% B %*% t(R))
+        R <- t(dat$V) %*% EMFit$V
+        norm(t(EMFit$V) %*% dat$Slist[[k]] %*% EMFit$V, type="F")
+        
         ##cancor(svd(do.call(cbind, dat$Olist))$u, Vinit)$cor
         
-        OmegaList <- Ulist <- list()
+        
+OmegaList <- Ulist <- list()
         for(k in 1:ngroups) {
             OmegaList[[k]] <- rep(1/2, R)
 
