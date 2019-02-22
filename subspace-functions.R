@@ -345,8 +345,13 @@ tgamma <- function(a, b, scale) {
 
 sampleOmega <- function(YV, O, s2, n) {
 
-    YVO <- YV %*% O
     R <- ncol(O)
+    
+    Rtilde <- min(n, R)
+    O <- O[, 1:Rtilde]
+    
+    YVO <- YV %*% O
+
     cvec <- diag(t(YVO) %*% YVO) /(2*s2)
 
     ## add divide by n for stability?
@@ -354,6 +359,9 @@ sampleOmega <- function(YV, O, s2, n) {
     g <- g/n
 
     omega <- 1 - g
+    
+    if(n < R)
+        omega <- c(omega, rep(0, R - n))
 
     omega
 
@@ -381,6 +389,7 @@ sampleO <- function(YV, O, s2, omega) {
 ## Ok is an S x R matrix,  V is a P x S and U is P x R
 ## B_k = Ok*omega_k*Ok^T
 ## A_k is sample covariance matrix for group k
+
 sampleV <- function(Slist, Ulist, s2vec, OmegaList, V, method="gibbs") {
 
     K <- length(Ulist)
@@ -607,13 +616,13 @@ makePrediction <- function(Y, V, Osamps, omegaSamps, s2samps, nvec,
     if(ngroups==1) {
         return(matrix(1, ncol=1, nrow=1))
     }
-    
+
     ##predictionMat <- matrix(0, nrow=length(genGroups), ncol=ngroups)
     ## Y <- Y / sum(Y^2)
     YV <- Y %*% V
     SigmaHat <- list()
         
-    probs <- matrix(0, nrow=numToAvg, ncol=ngroups)
+    ll_array <- array(0, dim=c(nrow(Y), numToAvg, ngroups))
     for(i in (nsamps-numToAvg+1):nsamps) {
             
         for(k  in 1:ngroups) {
@@ -623,35 +632,59 @@ makePrediction <- function(Y, V, Osamps, omegaSamps, s2samps, nvec,
             s2 <- s2samps[k, i]
             SigmaHat[[k]] <-  s2*(Ok %*% Lam %*% t(Ok) + diag(nrow(Ok)))
         }
-        
-        mp <- computeMembershipProbabilities(as.numeric(YV), SigmaHat)
-        probs[nsamps - i, ] <- mp
+
+        ll <- computeLL(YV, SigmaHat)
+        ll_array[, nsamps - i, ] <- ll
     }
-    probs
+    median_ll <- apply(ll_array, c(1, 3), median)
+    dim(median_ll)
+
+    priorWeights <- rep(1/length(SigmaHat), length(SigmaHat))
+    probs <- apply(median_ll, 1, function(probVec) {
+        normProbs <- probVec - max(probVec)
+        normProbs <- exp(normProbs) * priorWeights /
+            sum(exp(normProbs) * priorWeights)
+        
+        normProbs
+    })
+      
+    t(probs)
 
 }
 
-computeMembershipProbabilities <-
-    function(Y, SigmaList, priorWeights=rep(1/length(SigmaList),
-                                 length(SigmaList))) {
+computeLL <- function(Y, SigmaList, priorWeights=rep(1/length(SigmaList),
+                                                     length(SigmaList))) {
 
-        priorWeights <- priorWeights / sum(priorWeights)
-        unnormalizedProbs <- sapply(SigmaList, function(Sigma) {
-            dmvnorm(Y, sigma=Sigma, log=TRUE)
-        })
+    priorWeights <- priorWeights / sum(priorWeights)
+    unnormalizedProbs <- sapply(SigmaList, function(Sigma) {
+        dmvnorm(Y, sigma=Sigma, log=TRUE)
+    })
+
+    unnormalizedProbs
+}
+
+
+computeMembershipProbabilities <-  function(Y, SigmaList,
+                                            priorWeights=rep(1/length(SigmaList),
+                                                             length(SigmaList))) {
+
+    priorWeights <- priorWeights / sum(priorWeights)
+    unnormalizedProbs <- sapply(SigmaList, function(Sigma) {
+        dmvnorm(Y, sigma=Sigma, log=TRUE)
+    })
 
     if( !class(unnormalizedProbs) == "matrix")
         unnormalizedProbs <- matrix(unnormalizedProbs, nrow=1, ncol=length(SigmaList))
     
     probs <- apply(unnormalizedProbs, 1, function(probVec) {
-      normProbs <- probVec - max(probVec)
-      normProbs <- exp(normProbs) * priorWeights /
-        sum(exp(normProbs) * priorWeights)
-    
-      normProbs
+        normProbs <- probVec - max(probVec)
+        normProbs <- exp(normProbs) * priorWeights /
+            sum(exp(normProbs) * priorWeights)
+        
+        normProbs
     })
 
-    probs
+    t(probs)
 }
 
 
