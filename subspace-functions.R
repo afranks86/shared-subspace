@@ -67,12 +67,15 @@ posteriorPlot <- function(Osamps, OmegaSamps, s2samps, nsamps, groups,
         ylab <- expression("(" ~ lambda[1]/lambda[2] ~ ")")
     }
 
+    if(is.null(ymax))
+        ymax <- 1.1*max(OmegaSamps/(1-OmegaSamps))
+    
     plot(0, 0, xlim=c(-pi/2, pi/2),
          ylim=c(0, ymax), cex=0, xlab=expression("angle, acos("~U[1]^T*V[1]~")"), ylab=ylab, xaxt="n", cex.axis=cex.axis, cex.lab=1.5)
     axis(1, at=seq(-pi/2, pi/2, by=pi/4), labels=expression(-pi/2, -pi/4, 0, pi/4, pi/2), cex.axis=cex.axis, cex.lab=1.5)
 
     for(g in setdiff(groups, splitGroups)) {
-        
+
         pmPsi <- getPostMeanPsi(Osamps[, , g , ], OmegaSamps[, g, ],
                                 s2samps[g, ], nsamps)
 
@@ -173,7 +176,7 @@ eigenvalueDists <- function(OmegaSamps, nsamps, groups,
 
 posteriorPlotPolar <- function(Osamps, OmegaSamps, s2samps, nsamps, groups,
                           probRegion=0.95, hline=NULL, col=NULL,
-                          pch=NULL, lty=NULL, ymax=30, logRatio=FALSE,
+                          pch=NULL, lty=NULL, ymax=NULL, logRatio=FALSE,
                           plotPoints=TRUE, polar=FALSE, cex.axis=1.5) {
 
     ngroups <- length(groups)
@@ -188,15 +191,6 @@ posteriorPlotPolar <- function(Osamps, OmegaSamps, s2samps, nsamps, groups,
         lty=rep(1, ngroups)
     }
 
-                              
-    
-    ## par(mar=c(5.1, 5.1, 4.1, 2.1))
-    ## ylab <- ifelse(logRatio,
-    ##                expression("log"[2]~"(" ~ lambda[1]/lambda[2] ~ ")"),
-    ##                expression(lambda[1]/lambda[2]))
-    ## plot(0, 0, xlim=c(-pi/2, pi/2),
-    ##      ylim=c(0, ymax), cex=0, xlab=expression("angle, acos("~U[1]^T*V[1]~")"), ylab=ylab, xaxt="n", cex.axis=cex.axis, cex.lab=1.5)
-    ## axis(1, at=seq(-pi/2, pi/2, by=pi/4), labels=expression(-pi/2, -pi/4, 0, pi/4, pi/2), cex.axis=cex.axis, cex.lab=1.5);
     radius_vec <- angle_vec <- type_vec <- c()
                               
     for(g in groups) {
