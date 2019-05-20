@@ -11,6 +11,8 @@ library(cowplot)
 library(colorspace)
 library(ggdendro)
 library(tidyverse)
+library(RColorBrewer)
+library(colorspace)
 
 source("subspace-functions.R")
 source("fit-subspace.R")
@@ -21,24 +23,36 @@ load("LeukemiaData/leukemia.RData")
 ## Look at PCA for pooled data to evaluate differences in means
 YpooledDemeaned <- sweep(Ypooled, 2, colMeans(Ypooled), '-')
 indices <- which(typeVec %in% c("TEL-AML1", "T-ALL", "MLL"))
-plotarrays(YpooledDemeaned[indices, ], axis1=8, axis2=9, classvec=typeVec[indices],
+indices <- which(typeVec %in% c("BCR-ABL", "Hyperdip50", "TEL-AML1"))
+
+cols = RColorBrewer::brewer.pal(3, "Set1")
+plotarrays(YpooledDemeaned[indices, ], axis1=1, axis2=2, classvec=typeVec[indices],
+           star=FALSE, arraycol=cols)
+
+plotarrays(YpooledDemeaned[indices, ], axis1=1, axis2=2,
+           classvec=as.numeric(as.factor(typeVec[indices])),
+           star=FALSE, arraycol=cols)
+
+plotarrays(Ypooled[indices, ], axis1=1, axis2=2, classvec=typeVec[indices],
            star=FALSE, arraycol=c("red", "blue", "dark green"))
 
-S <- 45
-## number of eigenvectors in group subspace
-R <- 45
+
 P <- ncol(Ypooled)
 
 residualList <- Slist <- list()
 for( k in 1:ngroups ) {
     residual <- lm(Ylist[[k]] ~ 1)$residuals
+    colnames(residual) <- common_names[colnames(residual)]
     residual <- t(lm(t(residual) ~ 1)$residuals)
     residualList[[k]] <- residual
     Slist[[k]] <- t(residual) %*% residual
+
 }
 pooledResiduals <- do.call(rbind, residualList)
 
-getRank(pooledResiduals)
+S <- getRank(pooledResiduals)
+## number of eigenvectors in group subspace
+R <- S
 
 plot(svd(residualList[[ngroups]]/sqrt(nvec[ngroups]))$d^2, pch=19, cex=0.75, ylim=c(0, 50))
 for(k in 1:6) {
@@ -63,10 +77,10 @@ Vinit <- svd(do.call(cbind, lapply(1:ngroups, function(k) {
 
 Vinit <- Vinit %*% rustiefel(S, S)
 microbenchmark(EMFit <- subspaceEM(residualList, P=P, S=S, R=R, nvec=nvec, Vstart=Vinit, verbose=TRUE, stiefelAlgo=2), times=1)
-Vinitp <- EMFit$V
+Vinit <- EMFit$V
 
-#save(EMFit, Vinit, S, R, P, nvec, residualList,
-#     file=sprintf("results/leukemiaEM-%s.RData", format(Sys.Date(), "%m-%d")))
+save(EMFit, Vinit, S, R, P, nvec, residualList,
+     file=sprintf("results/leukemiaEM-%s.RData", format(Sys.Date(), "%m-%d")))
 
 evalRatiosQuad <- compute_variance_explained(Vinit, residualList, nvec, 1/EMFit$PrecVec)
 
@@ -105,7 +119,7 @@ s2vec <- 1/EMFit$PrecVec
 initSS <- list(V=Vinit, Ulist=Ulist, OmegaList=OmegaList, s2vec=s2vec)
 samples <- fitSubspace(P, S, R, Q=S-R, residualList,
                    nvec, ngroups, init=initSS,
-                   niters=10000, nskip=10)
+                   niters=10000, nskip=100)
 
 save(samples, initSS, file=sprintf("results/leukemiaBayes-full-%s.RData", format(Sys.Date(), "%m-%d")))
 
@@ -114,8 +128,11 @@ save(samples, initSS, file=sprintf("results/leukemiaBayes-full-%s.RData", format
 #########################
 
 regionColors <- c(4, 2:3, 1, 5:7)
+regionColors <- brewer.pal(7, "Set1")
+regionColors <- qualitative_hcl("Dark 3", n=7)
 
-g1 <- 1
+    
+g1 <- 4
 g2 <- 6
 pmPsi1 <- getPostMeanPsi(samples$Osamps[, , g1 , ],
                             samples$omegaSamps[, g1, ],
@@ -125,15 +142,22 @@ pmPsi2 <- getPostMeanPsi(samples$Osamps[, , g2 , ],
                          samples$s2samps[g2, ], 100)
 
 view_indices <- c(1, 2)
+R <- S
 O <- svd(pmPsi1[1:R, 1:R] - pmPsi2[1:R, 1:R])$u[, view_indices]
-O <- svd(pmPsi1[1:R, 1:R])$u[, view_indices]
 
+## O <- svd(pmPsi1[1:R, 1:R])$u[, view_indices]
 
-Vstar <- Vinit[, 1:R] %*% O
+## sum_mat <- Reduce('+', lapply(1:7, function(g)
+##     getPostMeanPsi(samples$Osamps[, , g , ],
+##                    samples$omegaSamps[, g, ],
+##                    samples$s2samps[g, ], 100)))
+## O <- svd(sum_mat)$u[, view_indices]
+
+Vstar <- EMFit$V[, 1:R] %*% O
 Osamps_proj <- array(dim = c(2, 2, ngroups, 1000))
 omegaSamps_proj <- array(dim = c(2, ngroups, 1000))
 
-for(i in 1:1000) {
+for(i in 1:100) {
     for(k in 1:ngroups) {
         ## Osamps2[1:R, 1:R, k, i ] <- t(O) %*% samples$Osamps[1:R, 1:R, k, i]
 
@@ -147,27 +171,34 @@ for(i in 1:1000) {
 }
 
 
+
+
+
 pdf(sprintf("paper/Figs/leukemiaPosterior-%-i-%i-%s.pdf", g1, g2, format(Sys.Date(), "%m-%d")), font="Times")
 with(samples,
-     posteriorPlot(Osamps_proj[, , 1:7, 501:1000], omegaSamps_proj[, 1:7, 501:1000],
-                s2samps[1:7, 501:1000], nsamps=100, groups=1:ngroups,
+     posteriorPlot(Osamps_proj[, , 1:7, ], omegaSamps_proj[, 1:7, ],
+                s2samps[1:7, ], nsamps=100, groups=1:ngroups,
                 probRegion=0.95, hline=NULL, type="mag",
                 plotPoints=TRUE, col=regionColors[1:7], ymax=1500, cex.pts=1))
 
 unique(typeVec)
 legend("topright", legend=unique(typeVec), col=regionColors, pch=19, title="Leukemia type", cex=1.2, bty="o", box.col="white",)
 
-omegaSamps_proj[, , 1000]/(1-omegaSamps_proj[, , 1000])
+omegaSamps_proj[, , 100]/(1-omegaSamps_proj[, , 100])
 
 dev.off()
+
+
+create_plots(V=EMFit$V, samples=samples, group1=g1, group2=g2, to_plot=grps,
+             view=c(1, 2), group_names=unique(typeVec))
 
 
 samples$omegaSamps[, , 1000]/(1-samples$omegaSamps[, , 1000])
 
 pdf(sprintf("paper/Figs/leukemia-biplot-%i-%s.pdf", g1, format(Sys.Date(), "%m-%d")), font="Times")
 
-## grps <- c(g1, g2, 7)
-grps <- c(1, 3, 2)
+grps <- c(g1, g2, 7)
+## grps <- c(1, 3, 2)
 
 symbol_names <- AnnotationDbi::select(hgu95av2.db, rownames(Vstar), c("SYMBOL"))
 
